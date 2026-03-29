@@ -49,6 +49,10 @@ Always use Context7 (MCP plugin) to fetch up-to-date documentation for any frame
 
 Always use the latest stable compatible versions of dependencies, frameworks, libraries, and tools. When adding new dependencies or upgrading existing ones, target the latest stable release that is compatible with the project's current stack. Never default to outdated versions from training data — verify current versions via Context7 or package registries.
 
+### 6. Commit Discipline
+
+After completing a set of changes or before switching to a different task, commit your work if there are uncommitted changes. Do not let changes accumulate across unrelated tasks — keep commits focused and timely.
+
 ## Instructions
 
 When this skill is invoked:
@@ -91,4 +95,7 @@ Always use Context7 (MCP plugin) to fetch up-to-date documentation for any frame
 
 ### Latest Stable Versions
 Always use the latest stable compatible versions of dependencies, frameworks, libraries, and tools. Never default to outdated versions from training data — verify current versions via Context7 or package registries.
+
+### Commit Discipline
+After completing a set of changes or before switching to a different task, commit your work if there are uncommitted changes. Do not let changes accumulate across unrelated tasks — keep commits focused and timely.
 ```
