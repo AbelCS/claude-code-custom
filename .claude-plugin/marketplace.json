@@ -1,0 +1,16 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "claude-code-custom",
+  "description": "Custom Claude Code plugins collection",
+  "owner": {
+    "name": "AbelCS"
+  },
+  "plugins": [
+    {
+      "name": "web-dev-workflow",
+      "description": "Establishes web development workflow rules for Claude Code projects",
+      "source": "./plugins/web-dev-workflow",
+      "category": "development"
+    }
+  ]
+}
