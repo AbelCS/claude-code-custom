@@ -1,6 +1,6 @@
 ---
-name: setup
 description: Configure this project with the web dev workflow rules (conventional commits, TDD, Serena, Context7, latest stable versions, commit discipline) by writing them to CLAUDE.md.
+allowed-tools: Read, Write, Edit
 ---
 
 Run the `setup` skill from this plugin to configure the current project's `CLAUDE.md` with the web development workflow rules.
