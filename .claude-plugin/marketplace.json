@@ -11,6 +11,12 @@
       "description": "Establishes web development workflow rules for Claude Code projects",
       "source": "./plugins/web-dev-workflow",
       "category": "development"
+    },
+    {
+      "name": "dev-workflow",
+      "description": "General development workflow rules (issue-driven development, etc.)",
+      "source": "./plugins/dev-workflow",
+      "category": "development"
     }
   ]
 }
