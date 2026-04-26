@@ -7,7 +7,7 @@ A personal [Claude Code](https://docs.claude.com/en/docs/claude-code) plugin mar
 | Plugin | Description |
 |---|---|
 | [web-dev-workflow](plugins/web-dev-workflow) | Establishes web development workflow rules (conventional commits, TDD, Serena, Context7, latest stable versions, commit discipline) in any project. |
-| [dev-workflow](plugins/dev-workflow) | General development workflow rules — currently provides an issue-driven development workflow for GitHub-hosted projects. |
+| [dev-workflow](plugins/dev-workflow) | General development workflow tooling for GitHub-hosted projects: issue-driven development and release-please setup. |
 
 ## Installation
 
@@ -49,6 +49,14 @@ Run inside any project where you want issue-driven development enabled:
 
 This writes a "GitHub Issue-Driven Workflow" section into the project's `CLAUDE.md`. After that, when you paste a GitHub issue link from the project's repo, Claude will read the issue, branch, work, push, and open a PR that closes the issue.
 
+To enable automated, conventional-commit-driven releases via [release-please](https://github.com/googleapis/release-please):
+
+```text
+/dev-workflow:enable-releases
+```
+
+This detects the project type (node, python, rust, …), creates `release-please-config.json`, `.release-please-manifest.json`, and `.github/workflows/release-please.yml`, and prints next steps.
+
 ## Repository layout
 
 ```
@@ -68,7 +76,8 @@ This writes a "GitHub Issue-Driven Workflow" section into the project's `CLAUDE.
         ├── .claude-plugin/
         │   └── plugin.json
         └── commands/
-            └── enable-github-issues.md  # /dev-workflow:enable-github-issues
+            ├── enable-github-issues.md  # /dev-workflow:enable-github-issues
+            └── enable-releases.md       # /dev-workflow:enable-releases
 ```
 
 ## License
