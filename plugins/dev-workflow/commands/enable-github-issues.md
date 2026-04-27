@@ -1,15 +1,32 @@
 ---
-description: Enable issue-driven development in this project by writing the GitHub issue workflow rules into CLAUDE.md.
+description: Enable issue-driven development in this project by writing the GitHub issue workflow rules into AGENTS.md (with a CLAUDE.md pointer for compatibility).
 allowed-tools: Read, Write, Edit
 ---
 
 Enable the issue-driven development workflow in the current project.
 
-Steps:
+## Step 1: Normalize the agent-instructions files
 
-1. Read the project's `CLAUDE.md` if it exists, to avoid duplicating rules already present.
-2. If the rules below are not present, append them. If `CLAUDE.md` does not exist, create it with the block.
-3. Confirm to the user what was added (or that the rules were already present).
+This plugin treats `AGENTS.md` as the canonical agent instructions file. `CLAUDE.md`, when present, is a thin pointer to `AGENTS.md`.
+
+Before writing any rules:
+
+1. Read `AGENTS.md` and `CLAUDE.md` if they exist.
+2. If `CLAUDE.md` exists and contains anything beyond a pointer to `AGENTS.md`, migrate its content into `AGENTS.md`: append sections that aren't already in `AGENTS.md`, do NOT duplicate sections that are.
+3. Overwrite `CLAUDE.md` with exactly this content (or create it if missing):
+
+   ```markdown
+   # CLAUDE.md
+
+   The canonical agent instructions for this project live in [AGENTS.md](./AGENTS.md).
+   ```
+
+4. If `AGENTS.md` does not exist after migration, create it.
+
+## Step 2: Write the rule block
+
+5. If the rule block below is NOT already present in `AGENTS.md`, append it. If it is partially present, only append the missing sections.
+6. Confirm to the user what was added, what was migrated from `CLAUDE.md`, and that `CLAUDE.md` is now a pointer.
 
 Use this exact block:
 

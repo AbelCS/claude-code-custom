@@ -1,17 +1,17 @@
 ---
 name: setup
-description: Use when starting a new web development project or when the user wants to establish web dev workflow rules in the current project. Sets up CLAUDE.md with conventional commits, TDD, Serena, and Context7 requirements.
+description: Use when starting a new web development project or when the user wants to establish web dev workflow rules in the current project. Sets up AGENTS.md (with a CLAUDE.md pointer) with conventional commits, TDD, Serena, and Context7 requirements.
 ---
 
 # Web Dev Workflow Setup
 
 ## Overview
 
-Establishes web development workflow rules in the current project by writing them into `CLAUDE.md`. This ensures every Claude Code session in this project follows the same standards.
+Establishes web development workflow rules in the current project by writing them into `AGENTS.md`. `CLAUDE.md` is maintained as a thin pointer to `AGENTS.md` for Claude Code compatibility. This ensures every Claude Code (or other agent) session in this project follows the same standards.
 
 ## What This Does
 
-Appends the following rules to the project's `CLAUDE.md`:
+Appends the following rules to the project's `AGENTS.md`:
 
 ### 1. Conventional Commits
 
@@ -57,12 +57,30 @@ After completing a set of changes or before switching to a different task, commi
 
 When this skill is invoked:
 
-1. Read the project's `CLAUDE.md` if it exists (to avoid duplicating rules)
-2. If these rules are NOT already present, append them to `CLAUDE.md`
-3. If `CLAUDE.md` doesn't exist, create it with these rules
-4. Confirm to the user what was added
+### Step 1: Normalize the agent-instructions files
 
-Use this exact block when writing to `CLAUDE.md`:
+This plugin treats `AGENTS.md` as the canonical agent instructions file. `CLAUDE.md`, when present, is a thin pointer to `AGENTS.md`.
+
+Before writing any rules:
+
+1. Read `AGENTS.md` and `CLAUDE.md` if they exist.
+2. If `CLAUDE.md` exists and contains anything beyond a pointer to `AGENTS.md`, migrate its content into `AGENTS.md`: append sections that aren't already in `AGENTS.md`, do NOT duplicate sections that are.
+3. Overwrite `CLAUDE.md` with exactly this content (or create it if missing):
+
+   ```markdown
+   # CLAUDE.md
+
+   The canonical agent instructions for this project live in [AGENTS.md](./AGENTS.md).
+   ```
+
+4. If `AGENTS.md` does not exist after migration, create it (an empty file is fine — content is appended below).
+
+### Step 2: Write the rule block
+
+5. If the rule block below is NOT already present in `AGENTS.md`, append it. If it is already present (in part or whole), only append the missing sections.
+6. Confirm to the user what was added, what was migrated from `CLAUDE.md`, and that `CLAUDE.md` is now a pointer.
+
+Use this exact block when writing to `AGENTS.md`:
 
 ```markdown
 ## Web Dev Workflow Rules

@@ -35,7 +35,7 @@ Once installed, run inside any project where you want the workflow rules applied
 /web-dev-workflow:setup
 ```
 
-This writes the workflow rules into the project's `CLAUDE.md` (creating it if needed). The rules then apply to every Claude Code session in that project.
+This writes the workflow rules into the project's `AGENTS.md` (creating it if needed) and ensures `CLAUDE.md` exists as a pointer to `AGENTS.md` for Claude Code compatibility. If a populated `CLAUDE.md` already exists, its content is migrated into `AGENTS.md` first. The rules then apply to every Claude Code (or other agent) session in that project.
 
 The same setup is also available as an auto-activating skill — Claude will offer to run it when it detects you are starting a new web project.
 
@@ -47,7 +47,7 @@ Run inside any project where you want issue-driven development enabled:
 /dev-workflow:enable-github-issues
 ```
 
-This writes a "GitHub Issue-Driven Workflow" section into the project's `CLAUDE.md`. After that, when you paste a GitHub issue link from the project's repo, Claude will read the issue, branch, work, push, and open a PR that closes the issue.
+This writes a "GitHub Issue-Driven Workflow" section into the project's `AGENTS.md` (migrating any existing `CLAUDE.md` content first, and replacing `CLAUDE.md` with a pointer). After that, when you paste a GitHub issue link from the project's repo, Claude will read the issue, branch, work, push, and open a PR that closes the issue.
 
 To enable automated, conventional-commit-driven releases via [release-please](https://github.com/googleapis/release-please):
 

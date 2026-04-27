@@ -1,14 +1,13 @@
 ---
-description: Configure this project with the web dev workflow rules (conventional commits, TDD, Serena, Context7, latest stable versions, commit discipline) by writing them to CLAUDE.md.
+description: Configure this project with the web dev workflow rules (conventional commits, TDD, Serena, Context7, latest stable versions, commit discipline) by writing them to AGENTS.md (with a CLAUDE.md pointer for compatibility).
 allowed-tools: Read, Write, Edit
 ---
 
-Run the `setup` skill from this plugin to configure the current project's `CLAUDE.md` with the web development workflow rules.
+Run the `setup` skill from this plugin to configure the current project's `AGENTS.md` with the web development workflow rules.
 
-The skill is located at `skills/setup/SKILL.md` within this plugin and contains the canonical instructions and the exact rule block to write.
+The skill is located at `skills/setup/SKILL.md` within this plugin and contains the canonical instructions, including:
 
-Steps:
-
-1. Read the project's `CLAUDE.md` if it exists, to avoid duplicating rules already present.
-2. If the rules are not present, append them; if `CLAUDE.md` does not exist, create it with the rule block from the skill.
-3. Confirm to the user what was added (or that the rules were already present).
+- Migrating any existing `CLAUDE.md` content into `AGENTS.md`.
+- Replacing `CLAUDE.md` with a pointer to `AGENTS.md`.
+- Appending the rule block to `AGENTS.md` (de-duplicating any sections already present).
+- Confirming to the user what was added or migrated.

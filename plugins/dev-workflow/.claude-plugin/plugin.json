@@ -1,5 +1,5 @@
 {
   "name": "dev-workflow",
   "description": "General development workflow rules for Claude Code projects (issue-driven development, etc.)",
-  "version": "0.1.0"
+  "version": "0.2.0"
 }

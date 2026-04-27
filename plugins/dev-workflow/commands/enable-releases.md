@@ -8,7 +8,7 @@ Set up [release-please](https://github.com/googleapis/release-please) for the cu
 ## Preconditions
 
 1. **Confirm GitHub repo.** Run `git remote -v`. If there is no `origin` pointing to `github.com`, stop and tell the user this command requires a GitHub-hosted repository.
-2. **Confirm conventional commits in use.** Look for a CLAUDE.md rule, a commitlint config, or a recent `git log --oneline -20` showing conventional commit prefixes (`feat:`, `fix:`, etc.). If you cannot confirm, warn the user that release-please requires conventional commits to work — recommend installing `web-dev-workflow` first or running `/web-dev-workflow:setup`.
+2. **Confirm conventional commits in use.** Look for a rule in `AGENTS.md` (or `CLAUDE.md` if it predates the AGENTS.md convention), a commitlint config, or a recent `git log --oneline -20` showing conventional commit prefixes (`feat:`, `fix:`, etc.). If you cannot confirm, warn the user that release-please requires conventional commits to work — recommend installing `web-dev-workflow` first or running `/web-dev-workflow:setup`.
 3. **Check for existing setup.** If `release-please-config.json`, `.release-please-manifest.json`, or `.github/workflows/release-please.yml` already exist, stop and ask the user before overwriting.
 
 ## Detect release-type
