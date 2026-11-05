@@ -211,6 +211,62 @@ assert_contains "$(jq -c .permissions.allow "$r/.claude/settings.local.json")" '
 registry superpowers@claude-plugins-official context7@claude-plugins-official serena@claude-plugins-official \
   intent@intent ui-ux-pro-max@ui-ux-pro-max-skill
 
+# --- CLAUDE.md as a symlink
+
+# To AGENTS.md: the plan, worked out on a copy, still sees it as AGENTS.md.
+r=$work/claude-link
+new_repo "$r"
+printf '# Ours\n\nKept.\n' >"$r/AGENTS.md"
+ln -s AGENTS.md "$r/CLAUDE.md"
+before=$(tree_hash "$r")
+plan=$(run "$r" plan)
+assert_exit 0 test "$(tree_hash "$r")" = "$before"
+assert_exit 0 test "$(action "$plan" CLAUDE.md)" = update
+applied=$(run "$r" apply)
+assert_exit 0 test "$plan" = "$applied"
+assert_exit 1 test -L "$r/CLAUDE.md"
+assert_file_same "$r/CLAUDE.md" "$work/import"
+assert_contains "$(cat "$r/AGENTS.md")" 'Kept.'
+
+# Outside the repo: the plan shows a conflict, and nothing is read or written.
+mkdir -p "$work/private"
+printf 'MARKER-PRIVATE-KEY-7f3a\n' >"$work/private/key"
+cp "$work/private/key" "$work/private-before"
+r=$work/claude-outside
+new_repo "$r"
+printf '# Ours\n' >"$r/AGENTS.md"
+ln -s "$work/private/key" "$r/CLAUDE.md"
+before=$(tree_hash "$r")
+plan=$(run "$r" plan)
+assert_exit 0 test "$(tree_hash "$r")" = "$before"
+assert_exit 0 test "$(action "$plan" CLAUDE.md)" = conflict
+assert_contains "$(printf '%s\n' "$plan" | jq -r 'select(.path == "CLAUDE.md") | .detail')" 'resolve it by hand'
+assert_exit 0 test -z "$(action "$plan" AGENTS.md)"
+assert_not_contains "$plan" MARKER-PRIVATE-KEY
+# Apply stops before writing anything.
+assert_exit 2 sh "$RUN" --root "$r" --answers "$answers" --apply
+assert_contains "$(sh "$RUN" --root "$r" --answers "$answers" --apply 2>&1)" 'a link to somewhere other than AGENTS.md'
+assert_exit 0 test "$(tree_hash "$r")" = "$before"
+assert_not_contains "$(cat "$r/AGENTS.md")" MARKER-PRIVATE-KEY
+assert_exit 0 test -L "$r/CLAUDE.md"
+assert_file_same "$work/private/key" "$work/private-before"
+
+# --- a folder setup writes in that leads out of the repo is refused
+
+for d in .claude .githooks docs; do
+  r=$work/escape-$d
+  new_repo "$r"
+  mkdir -p "$work/away-$d"
+  ln -s "$work/away-$d" "$r/$d"
+  before=$(tree_hash "$r")
+  for m in plan apply; do
+    assert_exit 2 sh "$RUN" --root "$r" --answers "$answers" "--$m"
+    assert_contains "$(sh "$RUN" --root "$r" --answers "$answers" "--$m" 2>&1)" "$d"
+  done
+  assert_exit 0 test "$(tree_hash "$r")" = "$before"
+  assert_exit 0 test -z "$(ls -A "$work/away-$d")"
+done
+
 # --- stops before writing anything
 
 # Claude Code older than the minimum.

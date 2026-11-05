@@ -3,8 +3,9 @@
 #
 # Makes <root>/CLAUDE.md exactly "@AGENTS.md" and a newline, the import that has
 # Claude Code read AGENTS.md. Prints one JSON line per file:
-#   { "path": str, "action": "create|update|keep", "detail": str? }
-# "plan" writes nothing. Exits 2 on an error, before anything is written.
+#   { "path": str, "action": "create|update|keep|conflict", "detail": str? }
+# "plan" writes nothing. Exits 1 on a conflict and 2 on an error, both before
+# anything is written.
 #
 # What CLAUDE.md holds, as legacy_claude_state tells it:
 #   absent   the import is created
@@ -12,11 +13,14 @@
 #   pointer  an old pointer published here: replaced with the import
 #   content  its text moves to the end of AGENTS.md first, after a blank line, making
 #            AGENTS.md if there's none. Then CLAUDE.md becomes the import.
-#   symlink  replaced by a regular file. What it points to moves like content, and
-#            the file it points to is left alone. A broken link has nothing to move.
+#   symlink  never read through, as a hostile repo could link it to a private file
+#            outside it. A link straight to this AGENTS.md is replaced by a regular
+#            file holding the import, moving nothing. Any other, in the repo or out,
+#            dangling or a chain of links, is a conflict, printed as one line for
+#            CLAUDE.md with exit 1, and left for the person to resolve by hand.
 # Lines that are just @AGENTS.md don't move, nor do blank lines at either end. Text
-# AGENTS.md already ends with isn't added again, so a symlink to AGENTS.md moves
-# nothing, and a rerun after a failure between the two writes doesn't repeat it.
+# AGENTS.md already ends with isn't added again, so a rerun after a failure between
+# the two writes doesn't repeat it.
 # Old rule blocks that move are left for agents-md.sh, which must run after this.
 
 die() {
@@ -38,6 +42,8 @@ here=$(dirname -- "$0")
 . "$here/legacy.sh"
 # shellcheck source=plugins/dev-workflow/scripts/setup/atomic.sh
 . "$here/atomic.sh"
+# shellcheck source=plugins/dev-workflow/scripts/setup/paths.sh
+. "$here/paths.sh"
 [ -f "$LEGACY_DIR/issues.md" ] || die "published texts not found in: $LEGACY_DIR"
 
 claude=$2/CLAUDE.md
@@ -75,10 +81,15 @@ case $state in
     detail="the import, rewritten to its exact form"
     ;;
   pointer) detail="an old pointer to AGENTS.md, replaced with the import" ;;
-  symlink | content)
-    if [ "$state" = symlink ]; then
-      detail="a symlink, replaced by a regular file holding the import"
+  symlink)
+    if ! path_link_is "$claude" "$agents"; then
+      report CLAUDE.md conflict "a link to somewhere other than AGENTS.md, so setup won't read it or move its text: resolve it by hand, then run setup again"
+      printf 'claude-md.sh: CLAUDE.md is a link to somewhere other than AGENTS.md, so it is not read and nothing is written. Resolve it by hand, then run setup again: %s\n' "$claude" >&2
+      exit 1
     fi
+    detail="a symlink to AGENTS.md, replaced by a regular file holding the import"
+    ;;
+  content)
     if [ -e "$claude" ]; then
       # The lines that move: not the import, and no blank lines at either end.
       awk '
@@ -122,11 +133,7 @@ if [ -s "$work/moved" ]; then
       report AGENTS.md create "holds the text moved from CLAUDE.md"
     fi
   fi
-  if [ "$state" = content ]; then
-    detail="its text moved to AGENTS.md, and replaced with the import"
-  else
-    detail="$detail, after its text moved to AGENTS.md"
-  fi
+  detail="its text moved to AGENTS.md, and replaced with the import"
 fi
 report CLAUDE.md update "$detail"
 

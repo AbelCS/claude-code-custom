@@ -9,6 +9,8 @@
 # 2 on an error. Errors are found before anything is written, except a ledger write
 # failing after AGENTS.md; the next run then finds those sections already right and
 # records them again. CLAUDE.md is never read: moving its text here comes first.
+# AGENTS.md as a symlink, or a .claude folder that leads out of the project through
+# one, is an error before anything is read.
 #
 # A managed section sits between "<!-- dev-workflow:begin <section> -->" and
 # "<!-- dev-workflow:end <section> -->", and its ledger key is "AGENTS.md#<section>".
@@ -58,12 +60,15 @@ here=$(dirname -- "$0")
 . "$here/agents-legacy.sh"
 # shellcheck source=plugins/dev-workflow/scripts/setup/agents-assemble.sh
 . "$here/agents-assemble.sh"
+# shellcheck source=plugins/dev-workflow/scripts/setup/paths.sh
+. "$here/paths.sh"
 [ -f "$LEGACY_DIR/issues.md" ] || die "published texts not found in: $LEGACY_DIR"
 
 agents=$root/AGENTS.md
 pf=$root/.claude/dev-workflow.json
 [ ! -L "$agents" ] || die "AGENTS.md is a symlink; not writing through it: $agents"
 [ ! -e "$agents" ] || { [ -f "$agents" ] && [ -r "$agents" ]; } || die "cannot read: $agents"
+path_check "$root" .claude/dev-workflow.json || exit 2
 
 work=$(mktemp -d "${TMPDIR:-/tmp}/agents-md.XXXXXX") || die "cannot make a temp folder"
 trap 'rm -rf "$work"' EXIT

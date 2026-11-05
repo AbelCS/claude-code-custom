@@ -200,8 +200,9 @@ claude_file=$root/CLAUDE.md
 claude=$(legacy_claude_state "$claude_file")
 
 blocks=
+# A symlink isn't read: it could lead to a private file outside the repo.
 for file in "$root/AGENTS.md" "$claude_file"; do
-  if [ -f "$file" ] && [ -r "$file" ]; then
+  if [ ! -L "$file" ] && [ -f "$file" ] && [ -r "$file" ]; then
     blocks="$blocks
 $(legacy_blocks_in "$file")"
   fi

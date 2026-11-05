@@ -101,17 +101,94 @@ assert_exit 1 test -L "$r/CLAUDE.md"
 assert_file_same "$r/CLAUDE.md" "$work/import"
 assert_file_same "$r/AGENTS.md" "$work/link-agents"
 
-# A symlink to another file: its text moves, and the file it pointed to stays.
+# The plan says so too, and writes nothing.
+r=$work/link-plan
+mkdir -p "$r"
+printf '# Rules\n' >"$r/AGENTS.md"
+cp "$r/AGENTS.md" "$work/link-plan-agents"
+ln -s AGENTS.md "$r/CLAUDE.md"
+out=$(run plan "$r")
+assert_exit 0 test "$(action "$out" CLAUDE.md)" = update
+assert_exit 0 test -z "$(action "$out" AGENTS.md)"
+assert_exit 0 test -L "$r/CLAUDE.md"
+assert_file_same "$r/AGENTS.md" "$work/link-plan-agents"
+
+# An absolute link to it, or one through ./, is the same file.
+r=$work/link-absolute
+mkdir -p "$r"
+printf '# Rules\n' >"$r/AGENTS.md"
+ln -s "$r/AGENTS.md" "$r/CLAUDE.md"
+out=$(run apply "$r")
+assert_file_same "$r/CLAUDE.md" "$work/import"
+assert_file_same "$r/AGENTS.md" "$work/link-plan-agents"
+rm "$r/CLAUDE.md" && ln -s ./AGENTS.md "$r/CLAUDE.md"
+out=$(run apply "$r")
+assert_file_same "$r/CLAUDE.md" "$work/import"
+
+# --- a symlink anywhere else is refused: nothing is read through it, or written
+
+refused() { # <root> <mode>: exits 1 with one conflict line for CLAUDE.md, and says why
+  if _out=$(sh "$CLAUDE_MD" "$2" "$1" 2>"$work/refused.err"); then _code=0; else _code=$?; fi
+  [ "$_code" -eq 1 ] || _assert_fail "expected exit 1 from claude-md.sh $2 $1, got $_code:
+$_out
+$(cat "$work/refused.err")"
+  assert_exit 0 test "$(printf '%s\n' "$_out" | jq -c '[.path, .action]')" = '["CLAUDE.md","conflict"]'
+  assert_contains "$(printf '%s\n' "$_out" | jq -r .detail)" 'resolve it by hand'
+  assert_contains "$(cat "$work/refused.err")" 'a link to somewhere other than AGENTS.md'
+}
+
+# Outside the repo: a private file is never copied into AGENTS.md.
+outside=$work/outside
+mkdir -p "$outside"
+printf 'MARKER-PRIVATE-KEY-7f3a\n' >"$outside/id_secret"
+cp "$outside/id_secret" "$work/outside-before"
+r=$work/link-outside
+mkdir -p "$r"
+printf '# Rules\n' >"$r/AGENTS.md"
+cp "$r/AGENTS.md" "$work/link-outside-agents"
+ln -s "$outside/id_secret" "$r/CLAUDE.md"
+for m in plan apply; do
+  refused "$r" "$m"
+  assert_file_same "$r/AGENTS.md" "$work/link-outside-agents"
+  assert_not_contains "$(cat "$r/AGENTS.md")" MARKER-PRIVATE-KEY
+  assert_exit 0 test -L "$r/CLAUDE.md"
+  assert_file_same "$outside/id_secret" "$work/outside-before"
+done
+assert_not_contains "$(cat "$work/refused.err")" MARKER-PRIVATE-KEY
+# With no AGENTS.md, none is made.
+rm "$r/AGENTS.md"
+refused "$r" apply
+assert_exit 1 test -e "$r/AGENTS.md"
+# A relative link out of the repo is no different.
+rm "$r/CLAUDE.md" && ln -s ../outside/id_secret "$r/CLAUDE.md"
+refused "$r" apply
+assert_exit 1 test -e "$r/AGENTS.md"
+
+# Another file in the repo, a dangling link, and a chain of two links to AGENTS.md.
 r=$work/link-other
 mkdir -p "$r/docs"
 printf 'Other rules\n' >"$r/docs/rules.md"
 cp "$r/docs/rules.md" "$work/link-other-rules"
+printf '# Rules\n' >"$r/AGENTS.md"
 ln -s docs/rules.md "$r/CLAUDE.md"
-out=$(run apply "$r")
-assert_exit 1 test -L "$r/CLAUDE.md"
-assert_file_same "$r/CLAUDE.md" "$work/import"
-assert_file_same "$r/AGENTS.md" "$work/link-other-rules"
+refused "$r" apply
+assert_exit 0 test -L "$r/CLAUDE.md"
+assert_file_same "$r/AGENTS.md" "$work/link-plan-agents"
 assert_file_same "$r/docs/rules.md" "$work/link-other-rules"
+rm "$r/CLAUDE.md" && ln -s missing.md "$r/CLAUDE.md"
+refused "$r" apply
+assert_exit 0 test -L "$r/CLAUDE.md"
+assert_exit 1 test -e "$r/missing.md"
+rm "$r/CLAUDE.md" && ln -s AGENTS.md "$r/middle.md" && ln -s middle.md "$r/CLAUDE.md"
+refused "$r" apply
+assert_exit 0 test -L "$r/CLAUDE.md"
+assert_file_same "$r/AGENTS.md" "$work/link-plan-agents"
+# A link to AGENTS.md with no AGENTS.md there dangles.
+r=$work/link-dangling-agents
+mkdir -p "$r"
+ln -s AGENTS.md "$r/CLAUDE.md"
+refused "$r" apply
+assert_exit 1 test -e "$r/AGENTS.md"
 
 # --- AGENTS.md as a symlink is refused, before anything is written
 

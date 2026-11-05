@@ -25,6 +25,8 @@
 # formatters as glob|command, each value quoted for sh.
 #
 # Exits 1 when validate finds problems, and 2 on any other error, writing nothing.
+# Neither file is read or written through a symlink, nor in a folder that leads out
+# of the project through one.
 
 die() {
   printf 'project-file.sh: %s\n' "$*" >&2
@@ -108,6 +110,12 @@ owned=$(jq -r '[keys[] | select(IN("schemaVersion", "pluginVersion", "managed"))
 
 pf=$root/.claude/dev-workflow.json
 env_file=$root/.githooks/dev-workflow.env
+# shellcheck source=plugins/dev-workflow/scripts/setup/paths.sh
+. "$here/paths.sh"
+path_check "$root" .claude/dev-workflow.json .githooks/dev-workflow.env || exit 2
+for f in "$pf" "$env_file"; do
+  [ ! -L "$f" ] || die "a symlink; not reading or writing through it: $f"
+done
 version=$(jq -r '.version | strings' "$plugin/.claude-plugin/plugin.json") || die "cannot read the plugin's version"
 current='{}'
 if [ -e "$pf" ]; then

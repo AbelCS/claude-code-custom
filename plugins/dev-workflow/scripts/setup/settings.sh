@@ -13,8 +13,9 @@
 #
 # Prints one JSON line per file: { "path": str, "action": "create|update|keep",
 # "detail": str? }. "plan" writes nothing. A file already holding the settings is
-# left byte for byte. Exits 2, before writing anything, on bad usage or a file that
-# isn't one JSON object.
+# left byte for byte. Exits 2, before writing anything, on bad usage, a file that
+# isn't one JSON object, or a .claude folder that leads out of the project through a
+# symlink, which is neither read nor written.
 
 die() {
   printf 'settings.sh: %s\n' "$*" >&2
@@ -38,11 +39,14 @@ here=$(dirname -- "$0")
 . "$here/atomic.sh"
 # shellcheck source=plugins/dev-workflow/scripts/setup/json.sh
 . "$here/json.sh"
+# shellcheck source=plugins/dev-workflow/scripts/setup/paths.sh
+. "$here/paths.sh"
 
 MERGE_RULE='Bash(gh pr merge *)'
 settings=$root/.claude/settings.json
 local_settings=$root/.claude/settings.local.json
 [ ! -e "$root/.claude" ] || [ -d "$root/.claude" ] || die "not a folder: $root/.claude"
+path_check "$root" .claude/settings.json || exit 2
 
 work=$(mktemp -d "${TMPDIR:-/tmp}/settings.XXXXXX") || die "cannot make a temp folder"
 trap 'rm -rf "$work"' EXIT

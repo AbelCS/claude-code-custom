@@ -112,3 +112,17 @@ assert_exit 1 test -e "$r/.claude/settings.json"
 assert_exit 2 sh "$SETTINGS"
 assert_exit 2 sh "$SETTINGS" apply "$work/merge" --other
 assert_exit 2 sh "$SETTINGS" apply "$work/missing"
+
+# --- a .claude folder that leads out of the project is refused, before reading it
+
+r=$work/escape
+mkdir -p "$r" "$work/away"
+printf '{"secret": "MARKER-7f3a"}\n' >"$work/away/settings.json"
+cp "$work/away/settings.json" "$work/away-before"
+ln -s "$work/away" "$r/.claude"
+for m in plan apply; do
+  assert_exit 2 sh "$SETTINGS" "$m" "$r" --allow-merge
+  assert_contains "$(sh "$SETTINGS" "$m" "$r" 2>&1)" 'outside the project'
+done
+assert_file_same "$work/away/settings.json" "$work/away-before"
+assert_exit 1 test -e "$work/away/settings.local.json"

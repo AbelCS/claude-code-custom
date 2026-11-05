@@ -30,6 +30,11 @@
 # githubSettings, mergePermission and installPlugins are each false unless set.
 # skills/setup/references/answers.md has the details.
 #
+# Nothing is read or written through a folder that leads out of the repo through a
+# symlink: that's an error, in --plan too. CLAUDE.md as a symlink to anywhere but
+# AGENTS.md is a conflict in the plan, and stops --apply before it writes anything,
+# as claude-md.sh won't read through it and the person has to resolve it by hand.
+#
 # Exits 0 with conflicts too, 1 when required tools are missing, and 2 on any other
 # error. $DW_GH and $DW_CLAUDE name gh and claude, for tests.
 
@@ -69,6 +74,11 @@ CLAUDE=${DW_CLAUDE:-claude}
 [ -d "$root" ] || die "not a folder: $root"
 root=$(CDPATH='' cd -- "$root" && pwd) || die "cannot open: $root"
 if top=$(git -C "$root" rev-parse --show-toplevel 2>/dev/null) && [ -n "$top" ]; then root=$top; fi
+# shellcheck source=plugins/dev-workflow/scripts/setup/paths.sh
+. "$here/paths.sh"
+# Every folder setup reads or writes in, through any script.
+path_check "$root" .claude/dev-workflow.json .githooks/pre-push .husky/pre-push \
+  docs/decisions.md docs/superpowers/specs docs/superpowers/plans || exit 2
 
 work=$(mktemp -d "${TMPDIR:-/tmp}/setup-run.XXXXXX") || die "cannot make a temp folder"
 trap 'rm -rf "$work"' EXIT
@@ -119,7 +129,8 @@ agents() {
 }
 
 # copy_in <from> <to> <names...>: copies each that's there, a symlink as one pointing
-# where the original does.
+# where the original does: a link to <from>'s AGENTS.md to the copy's, and any other
+# to its target in <from>, so the copy still sees each as what it is.
 copy_in() {
   _from=$1
   _to=$2
@@ -127,7 +138,9 @@ copy_in() {
   for _name in "$@"; do
     [ -e "$_from/$_name" ] || [ -L "$_from/$_name" ] || continue
     mkdir -p -- "$(dirname -- "$_to/$_name")" || return 2
-    if [ -L "$_from/$_name" ]; then
+    if path_link_is "$_from/$_name" "$_from/AGENTS.md"; then
+      ln -s -- "$_to/AGENTS.md" "$_to/$_name" || return 2
+    elif [ -L "$_from/$_name" ]; then
       _target=$(readlink -- "$_from/$_name") || return 2
       case $_target in /*) ;; *) _target=$(dirname -- "$_from/$_name")/$_target ;; esac
       ln -s -- "$_target" "$_to/$_name" || return 2
@@ -151,11 +164,18 @@ only_old_blocks() {
     "$work/probe/AGENTS.md" | grep -q '[^[:space:]]'
 }
 
-# files <dir> <out>: steps 1 to 3, written in <dir>.
+# files <dir> <out>: steps 1 to 3, written in <dir>. A CLAUDE.md that claude-md.sh
+# refuses is a conflict line, and sets claude_refused.
+claude_refused=false
 files() {
   sh "$here/project-file.sh" write "$1" "$work/facts.json" >>"$2" || return 2
   if only_old_blocks "$1"; then agents "$1" "$2" || return 2; fi
-  sh "$here/claude-md.sh" apply "$1" >>"$2" || return 2
+  sh "$here/claude-md.sh" apply "$1" >>"$2"
+  case $? in
+    0) ;;
+    1) claude_refused=true ;;
+    *) return 2 ;;
+  esac
   agents "$1" "$2"
 }
 
@@ -266,6 +286,8 @@ if [ "$mode" = plan ]; then
   merge_lines "$work/plan/lines"
   exit 0
 fi
+[ "$claude_refused" = false ] ||
+  die "stopped before writing anything: CLAUDE.md is a link to somewhere other than AGENTS.md. Resolve it by hand, then run setup again."
 
 : >"$work/lines"
 files "$root" "$work/lines" || exit 2

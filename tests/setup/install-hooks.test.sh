@@ -197,3 +197,18 @@ assert_exit 2 sh "$INSTALL"
 assert_exit 2 sh "$INSTALL" apply "$work/plain"
 assert_exit 2 sh "$INSTALL" apply "$work/missing" "$TEMPLATES"
 assert_exit 2 sh "$INSTALL" apply "$work/plain" "$work/missing"
+
+# --- a folder setup writes in that leads out of the repo is refused
+
+for d in .githooks .claude .husky; do
+  r=$work/escape-$d
+  new_repo "$r"
+  mkdir -p "$work/away-$d"
+  ln -s "$work/away-$d" "$r/$d"
+  for m in plan apply; do
+    assert_exit 2 sh "$INSTALL" "$m" "$r" "$TEMPLATES"
+    assert_contains "$(sh "$INSTALL" "$m" "$r" "$TEMPLATES" 2>&1)" 'outside the project'
+  done
+  assert_exit 0 test -z "$(ls -A "$work/away-$d")"
+  assert_exit 1 hooks_path "$r"
+done

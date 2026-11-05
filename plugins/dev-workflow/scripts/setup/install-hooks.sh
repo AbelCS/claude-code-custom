@@ -17,7 +17,9 @@
 # that isn't. A hook that only lost that mode is "update". dev-workflow.env, which
 # the hooks read, is project-file.sh's.
 #
-# How the hooks are turned on is in hook-activate.sh.
+# How the hooks are turned on is in hook-activate.sh. A folder it writes in that
+# leads out of the project through a symlink, .githooks, .claude or .husky, is an
+# error before anything is read or written.
 
 HOOKS="commit-msg pre-commit pre-push"
 FILES="dw-lib.sh $HOOKS"
@@ -49,6 +51,9 @@ here=$(dirname -- "$0")
 . "$here/json.sh"
 # shellcheck source=plugins/dev-workflow/scripts/setup/hook-activate.sh
 . "$here/hook-activate.sh"
+# shellcheck source=plugins/dev-workflow/scripts/setup/paths.sh
+. "$here/paths.sh"
+path_check "$root" .githooks/pre-push .claude/dev-workflow.json .husky/pre-push || exit 2
 
 pf=$root/.claude/dev-workflow.json
 work=$(mktemp -d "${TMPDIR:-/tmp}/install-hooks.XXXXXX") || die "cannot make a temp folder"

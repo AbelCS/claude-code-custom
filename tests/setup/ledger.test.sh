@@ -83,3 +83,13 @@ assert_exit 2 sh -c '. "$1"; printf "y\n" | atomic_write "$2"' sh \
 assert_exit 0 test -L "$work/link"
 assert_exit 0 test "$(cat "$work/script")" = "new"
 assert_exit 0 test "$(find "$work" -name '.dw-write.*' | wc -l)" -eq 0
+
+# --- a symlinked project file isn't read or written through
+
+printf '{"managed": {"k": "MARKER-7f3a"}}\n' >"$work/away.json"
+cp "$work/away.json" "$work/away-before.json"
+ln -s away.json "$work/pf-link.json"
+assert_exit 2 sh "$LEDGER" get "$work/pf-link.json" k
+assert_not_contains "$_assert_output" MARKER
+assert_exit 2 sh "$LEDGER" set "$work/pf-link.json" k abc
+assert_file_same "$work/away.json" "$work/away-before.json"

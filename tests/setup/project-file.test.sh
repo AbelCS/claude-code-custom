@@ -180,3 +180,29 @@ assert_exit 0 test -z "$(run existing-ci "$work/empty-lists")"
 assert_exit 2 sh "$PF"
 assert_exit 2 sh "$PF" write "$work/missing" "$work/empty-answers.json"
 assert_exit 2 sh "$PF" write "$work/merge" "$work/missing.json"
+
+# --- a folder that leads out of the project, or a symlinked file, is refused
+
+printf '{"commands": {"check": "true"}}\n' >"$work/escape-answers.json"
+for d in .claude .githooks; do
+  r=$work/escape-$d
+  mkdir -p "$r" "$work/away-$d"
+  ln -s "$work/away-$d" "$r/$d"
+  assert_exit 2 sh "$PF" write "$r" "$work/escape-answers.json"
+  assert_contains "$(sh "$PF" write "$r" "$work/escape-answers.json" 2>&1)" 'outside the project'
+  assert_exit 0 test -z "$(ls -A "$work/away-$d")"
+  assert_exit 1 test -e "$r/.claude/dev-workflow.json"
+done
+# A symlinked project file isn't read, even when the env file would be written first.
+r=$work/linked-file
+mkdir -p "$r/.claude" "$work/away-file"
+printf '{"schemaVersion": 1, "pluginVersion": "1.0.0", "commands": {"check": "MARKER-7f3a"}}\n' >"$work/away-file/pf.json"
+ln -s "$work/away-file/pf.json" "$r/.claude/dev-workflow.json"
+assert_exit 2 sh "$PF" write "$r" "$work/escape-answers.json"
+assert_not_contains "$(sh "$PF" write "$r" "$work/escape-answers.json" 2>&1)" MARKER
+assert_exit 1 test -e "$r/.githooks"
+rm "$r/.claude/dev-workflow.json"
+mkdir -p "$r/.githooks"
+ln -s "$work/away-file/pf.json" "$r/.githooks/dev-workflow.env"
+assert_exit 2 sh "$PF" write "$r" "$work/escape-answers.json"
+assert_exit 1 test -e "$r/.claude/dev-workflow.json"

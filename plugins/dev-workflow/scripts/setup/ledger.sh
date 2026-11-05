@@ -13,8 +13,9 @@
 #   set   records it, creating the file and its folder if needed, and keeping every
 #         other field and the file's mode
 #
-# Exits 2 on bad usage, a file that can't be read, or a project file that isn't a
-# JSON object with an object for "managed". Nothing is written then.
+# Exits 2 on bad usage, a file that can't be read, a project file that's a symlink,
+# which is never read or written through, or one that isn't a JSON object with an
+# object for "managed". Nothing is written then.
 
 die() {
   printf 'ledger.sh: %s\n' "$*" >&2
@@ -30,6 +31,10 @@ valid() {
   jq -e 'type == "object" and ((.managed // {}) | type == "object")' "$1" >/dev/null 2>&1 ||
     die "not a valid project file: $1"
 }
+
+case "${1:-}:$#" in
+  get:3 | set:4) [ ! -L "$2" ] || die "the project file is a symlink; not reading or writing through it: $2" ;;
+esac
 
 case "${1:-}:$#" in
   hash:2)

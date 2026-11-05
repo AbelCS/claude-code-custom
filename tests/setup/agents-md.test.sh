@@ -430,3 +430,12 @@ assert_exit 2 sh "$AGENTS_MD" plan "$work/no-such-dir" "$TEMPLATES"
 mkdir -p "$work/short-templates"
 cp "$TEMPLATES/project.md" "$work/short-templates/"
 assert_exit 2 sh "$AGENTS_MD" plan "$work/new" "$work/short-templates"
+
+# A .claude folder, where the ledger is, that leads out of the project is refused.
+r=$work/escape
+mkdir -p "$r" "$work/away"
+ln -s "$work/away" "$r/.claude"
+assert_exit 2 sh "$AGENTS_MD" apply "$r" "$TEMPLATES"
+assert_contains "$_assert_output" 'outside the project'
+assert_exit 1 test -e "$r/AGENTS.md"
+assert_exit 0 test -z "$(ls -A "$work/away")"

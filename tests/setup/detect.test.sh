@@ -328,3 +328,12 @@ assert_exit 2 sh "$DETECT" "$r/file"
 # Without jq it says so, rather than printing something that isn't JSON.
 assert_exit 2 env PATH=/nonexistent /bin/sh "$DETECT" "$r"
 assert_contains "$_assert_output" "jq"
+
+# --- a CLAUDE.md link isn't read for old blocks, wherever it points
+
+r=$(tmp_dir)/claude-link
+new_repo "$r"
+away=$(tmp_dir)
+block 5 >"$away/rules.md"
+ln -s "$away/rules.md" "$r/CLAUDE.md"
+assert_field "$r" '[.claude, .legacyBlocks]' '["symlink",[]]'
