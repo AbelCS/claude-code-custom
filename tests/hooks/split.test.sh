@@ -270,3 +270,28 @@ expect "echo \"\$(cat <<EOF${nl}gh pr merge${nl}EOF)\" && b" \
   "echo \"\$(cat <<EOF${sep}gh pr merge${sep}EOF)\"" \
   'b'
 expect "( cat <<EOF${nl}gh pr merge${nl}EOF${nl}) && b" 'cat <<EOF' 'b'
+
+# --- Word mode: with WORD_END set, each word ends with it instead of keeping its spaces
+
+# expect_words <input> <line>...: as expect, with | ending each word.
+expect_words() {
+  _input=$1
+  shift
+  _expected=$(printf '%s\n' "$@")
+  _actual=$(printf '%s\n' "$_input" | awk -v 'WORD_END=|' -f "$splitter") || _assert_fail "the splitter failed on: $_input"
+  [ "$_actual" = "$_expected" ] || _assert_fail "for input:
+$_input
+expected:
+$_expected
+got:
+$_actual"
+}
+
+expect_words "a  b${tab}c" 'a|b|c|'
+expect_words "A=1 a \"b c\" 'd e'" "a|\"b c\"|'d e'|"
+expect_words 'gh pr merge --body "" && x' 'gh|pr|merge|--body|""|' 'x|'
+expect_words 'if (a b); then c; fi' 'a|b|' 'c|'
+expect_words 'a $(b c) d' 'b|c|' 'a|$(b c)|d|'
+expect_words 'a "$(b "c d")" e' 'b|"c d"|' 'a|"$(b "c d")"|e|'
+expect_words 'a 2>&1 b' 'a|2>&1|b|'
+expect_words "a <<EOF${nl}it's${nl}EOF${nl}b c" 'a|<<EOF|' 'b|c|'

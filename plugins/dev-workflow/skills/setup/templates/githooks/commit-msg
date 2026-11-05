@@ -55,7 +55,7 @@ message=$(message_text "$1") || reject "could not read $1"
 subject=$(printf '%s\n' "$message" | sed -n '/[^[:space:]]/{p;q;}')
 
 printf '%s\n' "$subject" |
-  grep -Eq "^((fixup|squash|amend)! )*($DW_COMMIT_TYPES)(\\([^)]+\\))?!?: [^ ]" ||
+  grep -Eq "^((fixup|squash|amend)! )*$DW_SUBJECT" ||
   reject "expected \"<type>(<scope>): <subject>\", got: $subject"
 
 # Fixups are folded into another commit, and name it instead. A detached HEAD, as in

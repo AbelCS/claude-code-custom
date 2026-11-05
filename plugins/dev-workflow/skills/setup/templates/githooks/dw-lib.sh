@@ -1,6 +1,6 @@
 #!/bin/sh
 # Shared by the dev-workflow git hooks, and by the plugin's Claude Code hooks for
-# dw_has_attribution. Source this file; don't run it.
+# dw_has_attribution and DW_SUBJECT. Source this file; don't run it.
 #
 # dev-workflow.env sits next to the hooks. Setup generates it from the project file:
 #   DW_DEFAULT_BRANCH  the default branch
@@ -9,6 +9,10 @@
 #   DW_FORMATTERS      newline-separated glob|command lines
 
 DW_COMMIT_TYPES='feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert'
+
+# The start of a Conventional Commits subject, as an extended regular expression.
+# shellcheck disable=SC2034 # For the scripts sourcing this.
+DW_SUBJECT="($DW_COMMIT_TYPES)(\\([^)]+\\))?!?: [^ ]"
 
 # AI tools and the vendors people name in their place. Some are ordinary words or
 # people's names, which is why every pattern below needs them as a whole word.
@@ -20,15 +24,17 @@ DW_AI_ADDRESSES='anthropic\.com|openai\.com|cursor\.com|cursor\.sh|aider\.chat|c
 _dw_not='[^[:alnum:]]'
 _dw_space='[[:space:]]'
 _dw_tool="($DW_AI_TOOLS)"
-_dw_coauthor="^$_dw_not*co-authored-by$_dw_space*:"
+# Markdown around a trailer's parts, as in **Co-Authored-By:** Claude.
+_dw_mark='[*_`]*'
+_dw_coauthor="^$_dw_not*(co-authored|assisted)-by$_dw_mark$_dw_space*:$_dw_mark"
 _dw_generated="(generated[-[:space:]]+(with|by)|written[-[:space:]]+by)"
 
 # A co-author is an AI when the whole name is a tool's, perhaps with a version, or
 # when the address or the GitHub account is. People can share a name with a tool, so
-# a longer name with another address passes.
-_dw_attribution="$_dw_coauthor$_dw_space*((github|google|anthropic|openai)$_dw_space+)?$_dw_tool"
+# a longer name with another address passes. Assisted-by can add :model to the name.
+_dw_attribution="$_dw_coauthor$_dw_space*$_dw_mark((github|google|anthropic|openai)$_dw_space+)?$_dw_tool"
 _dw_attribution="$_dw_attribution($_dw_space+(code|cli|agent|ai|assistant))*"
-_dw_attribution="$_dw_attribution($_dw_space+([a-z]+$_dw_space+)?v?[0-9][0-9.]*)?$_dw_space*(<|\$)"
+_dw_attribution="$_dw_attribution($_dw_space+([a-z]+$_dw_space+)?v?[0-9][0-9.]*)?(:[^[:space:]]*)?$_dw_mark$_dw_space*(<|\$)"
 _dw_attribution="$_dw_attribution|$_dw_coauthor.*@([a-z0-9.-]+\\.)?($DW_AI_ADDRESSES)([^a-z0-9.-]|\$)"
 _dw_attribution="$_dw_attribution|$_dw_coauthor.*<([0-9]+\\+)?$_dw_tool(\\[bot\\])?@users\\.noreply\\.github\\.com>"
 _dw_attribution="$_dw_attribution|$_dw_coauthor(.*$_dw_not)?$_dw_tool($_dw_not.*)?\\[bot\\]"
@@ -39,12 +45,17 @@ _dw_attribution="$_dw_attribution|(^|$_dw_not)$_dw_generated$_dw_not+((the|a|an|
 # The robot emoji footer, as bytes so that this file stays ASCII.
 _dw_attribution="$_dw_attribution|^$_dw_not*$(printf '\360\237\244\226')"
 
-# dw_has_attribution [file]: reads the file, or stdin without one, exactly as it is.
-# Comments only exist in commit messages, so removing them is up to commit-msg.
-# Exits 0 if found, 1 if not, and above 1 if it couldn't read the text, which callers
-# must not take as clean. It matches bytes, so the emoji works in any locale.
+# dw_has_attribution [file]: reads the file, or stdin with no argument, exactly as it is.
+# An empty name is a file it can't read. Comments only exist in commit messages, so
+# removing them is up to commit-msg. Exits 0 if found, 1 if not, and above 1 if it
+# couldn't read the text, which callers must not take as clean. It matches bytes, so the
+# emoji works in any locale.
 dw_has_attribution() {
-  LC_ALL=C grep -Eiq -e "$_dw_attribution" -- ${1:+"$1"}
+  if [ "$#" -gt 0 ]; then
+    LC_ALL=C grep -Eiq -e "$_dw_attribution" -- "$1"
+  else
+    LC_ALL=C grep -Eiq -e "$_dw_attribution"
+  fi
 }
 
 # dw_issue_from_branch <branch>: prints the issue number of a <type>/<issue>-<slug>

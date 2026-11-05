@@ -7,6 +7,10 @@
 # quotes or a substitution, comes out as the byte 037 to keep it on one line. Readers
 # who need the text as written turn it back with tr '\037' '\n'.
 #
+# With -v WORD_END=<byte>, each word on a line ends with that byte in place of the spaces
+# around it, still with its quotes, so that what reads the words needn't find their edges
+# again, which takes all of the grammar here.
+#
 # What splits and what doesn't:
 # - &&, ||, ;, |, |&, & and newlines split. 2>&1, &>out and >|out don't.
 # - Quoted text is literal. $(...), `...` and <(...) run, also inside double quotes, so
@@ -52,7 +56,7 @@ function commands(i, closer,    c, n, saved_cur, saved_word, saved_fresh, saved_
       while (i <= L && substr(S, i, 1) != "\n") i++
     } else if (c == " " || c == "\t") {
       end_word()
-      if (cur != "") cur = cur c
+      if (cur != "" && WORD_END == "") cur = cur c
       i++
     } else if (c == "\\" && n == "\n") {
       i += 2
@@ -159,7 +163,7 @@ function end_word() {
     }
     fresh = 0
   }
-  cur = cur word
+  cur = cur word WORD_END
   word = ""
 }
 
