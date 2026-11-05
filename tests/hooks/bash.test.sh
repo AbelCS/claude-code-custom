@@ -222,6 +222,19 @@ rule none 'git checkout sub && git merge main'
 rule none 'git checkout . && git merge main'
 rule none 'git checkout -p && git merge main'
 
+# A -- with nothing after it names no paths, so this moves.
+on_branch feat/1-x
+rule deny 'git checkout main -- && git merge feat/2-y' 'main'
+rule deny 'git checkout not-a-branch -- && git merge feat/2-y' 'separately'
+rule deny 'git checkout sub -- && git merge feat/2-y' 'separately'
+rule none 'git checkout main -- file && git merge main'
+rule none 'git checkout -- && git merge main'
+on_branch main
+rule none 'git checkout feat/1-x -- && git merge main'
+rule deny 'git checkout -- && git merge feat/1-x' 'main'
+rule deny 'git checkout feat/1-x -- file && git merge feat/1-x' 'main'
+on_branch feat/1-x
+
 # Where it can't be told, a later merge has to run on its own.
 for move in \
   'git switch "$BRANCH"' \
@@ -302,14 +315,16 @@ assert_decision none "$hook" "$no_cwd"
 rule deny "git -C \"$other\" merge x" 'main'
 rule deny "git -C \"$other/sub\" merge x" 'main'
 rule deny "git -C \"$other\" -C sub merge x" 'main'
-rule none 'git -C path merge main'
+rule deny 'git -C path merge main' 'separately'
+rule deny 'git -C "$MAIN" merge feat/1-x' 'separately'
 rule none 'git -C sub merge main'
 rule none "git -C \"$other\" merge --abort"
 git -C "$other" symbolic-ref HEAD refs/heads/feat/9-z
 rule none "git -C \"$other\" merge main"
 on_branch main
 rule none "git -C \"$other\" merge main"
-rule deny 'git -C path merge x' 'main'
+rule deny 'git -C path merge x' 'separately'
+rule deny 'git -C "$MAIN" merge feat/1-x' 'separately'
 rule deny 'git -C sub merge x' 'main'
 
 # That folder's own default branch, and its own moves.
@@ -326,6 +341,109 @@ rule deny 'git switch main && git -C sub merge x' 'main'
 on_branch main
 rule none 'git -C "'"$other"'" switch feat/9-z && git -C "'"$other"'" merge main'
 rule deny 'git -C "'"$other"'" switch feat/9-z && git merge x' 'main'
+on_branch feat/1-x
+
+# --- cd moves where the rest of the command acts
+
+# The project on main, the session in a worktree on a work branch.
+on_branch main
+cd "$worktree" || exit 1
+rule deny "cd \"$repo\" && git merge feat/1-x" 'main'
+rule deny "cd \"$repo\"; git merge feat/1-x" 'main'
+rule deny "(cd \"$repo\"; git merge feat/1-x)" 'main'
+rule deny "(cd \"$repo\" && git merge feat/1-x)" 'main'
+rule deny "cd -P \"$repo\" && git merge feat/1-x" 'main'
+rule deny "cd -- \"$repo\" && git merge feat/1-x" 'main'
+rule deny "cd \"$repo\">/dev/null && git merge feat/1-x" 'main'
+rule deny "cd \"$repo\" && cd sub && git merge feat/1-x" 'main'
+rule deny "cd \"$repo/sub\" && cd .. && git merge feat/1-x" 'main'
+rule deny "cd \"$repo\" && git -C sub merge feat/1-x" 'main'
+rule none 'git merge main'
+rule none "cd \"$repo\" && git switch feat/1-x && git merge main"
+rule none "cd \"$repo\"; git switch main; cd \"$worktree\"; git merge main"
+rule none "cd \"$repo\" && git merge --abort"
+rule none "cd \"$repo\" && git status"
+cd "$worktree/sub" || exit 1
+rule none 'cd .. && git merge main'
+rule deny "cd .. && cd \"$repo\" && git merge feat/1-x" 'main'
+cd "$repo" || exit 1
+
+# The session on main, moving to a work branch's worktree.
+rule none "cd \"$worktree\" && git merge main"
+rule none "cd \"$worktree/sub\" && git merge main"
+rule none "(cd \"$worktree\"; git merge main)"
+rule none "cd \"$worktree\" && git -C sub merge main"
+rule deny "cd \"$worktree\" && cd \"$repo\" && git merge feat/1-x" 'main'
+rule deny "cd \"$worktree\" && git -C \"$repo\" merge feat/1-x" 'main'
+rule deny "cd \"$worktree\" && git switch main && git merge feat/1-x" 'main'
+
+# A folder that can't be told. The branch makes no difference to these.
+for move in \
+  'cd "$X"' \
+  'cd $X' \
+  'cd "$X/sub"' \
+  'cd -' \
+  'cd "$(git rev-parse --show-toplevel)"' \
+  'cd ~someone' \
+  'cd no-such-folder'; do
+  rule deny "$move && git merge feat/2-y" 'separately'
+done
+rule deny 'cd "$X" && cd sub && git merge feat/2-y' 'separately'
+rule deny 'git -C no-such-folder merge feat/2-y' 'separately'
+rule deny 'cd "$X" && git -C sub merge feat/2-y' 'separately'
+# Where it might have moved a branch that's judged later.
+rule deny "cd \"\$X\" && git switch main; cd \"$worktree\"; git merge main" 'separately'
+rule deny 'git -C "$X" switch main && git merge main' 'separately'
+# What isn't a merge, or a real merge somewhere known again.
+rule none 'cd "$X"'
+rule none 'cd "$X" && git status'
+rule none 'cd "$X" && git merge --abort'
+rule none 'cd "$X" && git merge --ff-only origin/main'
+rule none 'cd "$X" && git pull --ff-only'
+rule none 'git -C "$X" merge --abort'
+rule none "cd \"\$X\" && cd \"$worktree\" && git merge main"
+rule none "cd \"\$X\" && git -C \"$worktree\" merge main"
+on_branch feat/1-x
+rule deny 'cd "$X" && git merge feat/2-y' 'separately'
+rule none 'cd "$X" && git pull --ff-only'
+
+# cd with no folder is home, which can be told.
+on_branch main
+real_home=$HOME
+HOME=$repo
+rule deny 'cd && git merge feat/1-x' 'main'
+rule deny 'cd ~ && git merge feat/1-x' 'main'
+rule deny 'cd ~/sub && git merge feat/1-x' 'main'
+cd "$worktree" || exit 1
+rule deny 'cd && git merge feat/1-x' 'main'
+cd "$repo" || exit 1
+HOME=$worktree
+rule none 'cd && git merge main'
+rule none 'cd ~/sub && git merge main'
+HOME=
+rule deny 'cd && git merge main' 'separately'
+HOME=$real_home
+on_branch feat/1-x
+
+# --- What landing and updating use stays clean, wherever the session is
+
+landing='gh pr merge 7 --squash --subject "chore: x (#2)" --body "" --delete-branch'
+clean_everywhere() {
+  rule none "$landing"
+  rule none 'git pull --ff-only'
+}
+git -C "$repo" symbolic-ref refs/remotes/origin/HEAD refs/remotes/origin/main
+for branch in main feat/1-x feat/2-y trunk; do
+  on_branch "$branch"
+  clean_everywhere
+done
+git -C "$repo" switch -q --detach main
+clean_everywhere
+on_branch main
+cd "$worktree" || exit 1
+clean_everywhere
+cd "$repo" || exit 1
+git -C "$repo" symbolic-ref --delete refs/remotes/origin/HEAD
 on_branch feat/1-x
 
 # --- Merging after tests
@@ -794,6 +912,37 @@ rule none 'cd web && gh pr merge 1 --squash --body ""'
 rule ask 'cd db && ./reset.sh'
 rule ask './reset.sh'
 rule none 'cd db'
+
+# Lists are matched past git's own options, on either side.
+git_lists="$(tmp_dir)/git lists"
+new_repo "$git_lists"
+mkdir -p "$git_lists/.claude"
+cat >"$git_lists/.claude/dev-workflow.json" <<'JSON'
+{
+  "commands": { "check": "git -C web diff --stat" },
+  "testCommands": ["git diff --check"],
+  "databaseResetCommands": ["git clean -fdx", "git --no-pager -C db reset --hard"]
+}
+JSON
+CLAUDE_PROJECT_DIR=$git_lists
+rule deny 'git diff --check && gh pr merge 1 --squash --body ""' 'test'
+rule deny 'git -C sub diff --check && gh pr merge 1 --squash --body ""' 'test'
+rule deny 'git -C "a b" -C sub diff --check && gh pr merge 1 --squash --body ""' 'test'
+rule deny 'git -C "$X" diff --check && gh pr merge 1 --squash --body ""' 'test'
+rule deny 'git -c k=v diff --check && gh pr merge 1 --squash --body ""' 'test'
+rule deny 'git --no-pager -C sub diff --check -- x && gh pr merge 1 --squash --body ""' 'test'
+rule deny 'git diff --stat && gh pr merge 1 --squash --body ""' 'test'
+rule deny 'git -C other diff --stat && gh pr merge 1 --squash --body ""' 'test'
+rule none 'git -C sub diff --check'
+rule none 'git -C sub diff --cached && gh pr merge 1 --squash --body ""'
+rule none 'git -C diff --check && gh pr merge 1 --squash --body ""'
+rule ask 'git clean -fdx'
+rule ask 'git -C sub clean -fdx'
+rule ask 'git -c k=v -C sub clean -fdx'
+rule ask 'git reset --hard'
+rule ask 'git -C sub reset --hard origin/main'
+rule none 'git -C sub clean -n'
+rule none 'git -C sub reset --soft'
 
 # With no lists at all, the always-on rules still hold.
 minimal="$(tmp_dir)/minimal"

@@ -56,19 +56,43 @@ project_commands() {
   [ -z "$pc_text" ] || normal_commands "$pc_text"
 }
 
+# Sets listed_form to a normal command without git's -C, which normal commands keep for
+# the merge rules and which says nothing about what's being run.
+find_listed_form() {
+  listed_form=$1
+  case $listed_form in
+    "git$word_end-C$word_end"*) ;;
+    *) return 0 ;;
+  esac
+  listed_form=${listed_form#"git$word_end"}
+  while :; do
+    case $listed_form in
+      "-C$word_end"*)
+        listed_form=${listed_form#"-C$word_end"}
+        listed_form=${listed_form#*"$word_end"}
+        ;;
+      *) break ;;
+    esac
+  done
+  listed_form=git$word_end$listed_form
+}
+
 # matches_any <normal commands> <normal command>: whether the command starts with all
-# the words of any on the list. Moving to a folder is part of how a project runs a
-# command, not what it runs, so it doesn't count.
+# the words of any on the list, with git's own options removed from both. Moving to a
+# folder is part of how a project runs a command, not what it runs, so it doesn't count.
 matches_any() {
   ma_rest=$1$newline
+  find_listed_form "$2"
+  ma_line=$listed_form
   while [ -n "$ma_rest" ]; do
     ma_pattern=${ma_rest%%"$newline"*}
     ma_rest=${ma_rest#*"$newline"}
     case $ma_pattern in
       '' | "cd$word_end"*) continue ;;
     esac
-    case $2 in
-      "$ma_pattern"*) return 0 ;;
+    find_listed_form "$ma_pattern"
+    case $ma_line in
+      "$listed_form"*) return 0 ;;
     esac
   done
   return 1
@@ -118,6 +142,10 @@ removes_compose_volumes() {
 
 check_tool() {
   case $1 in
+    cd)
+      shift
+      check_cd "$@"
+      ;;
     git)
       shift
       check_git "$@"
@@ -143,6 +171,9 @@ commands=$(normal_commands "$command_text") || dw_deny "dev-workflow: couldn't r
 test_seen=
 ask_reason=
 branch_moves=
+move_unknown=
+walk_folder=
+walk_unknown=
 
 # Not a pipeline: that would run the loop in a subshell, losing test_seen and leaving a
 # denial to end only the loop.
