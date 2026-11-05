@@ -39,7 +39,7 @@
         ]
       },
       {
-        "matcher": "mcp__.*[Gg]it[Hh]ub.*",
+        "matcher": "mcp__.*[Gg][Ii][Tt][Hh][Uu][Bb].*",
         "hooks": [
           {
             "type": "command",

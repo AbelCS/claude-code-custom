@@ -6,6 +6,10 @@
 # It must not get in the session's way. So it always exits 0, what it can't work out
 # becomes a line rather than an error, and it reads files rather than starting anything
 # slow. That's why gh is only looked for, not asked whether it's signed in.
+#
+# Claude reads this output as context, and a repo's files and settings are the repo's to
+# write. So a line never repeats a value from them: only fixed text, the plugin's own
+# version, and numbers worked out here.
 
 # Nothing outside the shell before the project file is found: see common.sh.
 case $0 in
@@ -58,26 +62,51 @@ find_git_folders() {
   return 1
 }
 
-check_git_hooks() {
-  find_git_folders || return 0
-  [ -z "$(git -C "$session_folder" config --get core.hooksPath 2>/dev/null)" ] || return 0
+# Whether core.hooksPath, which has a value, leads to hooks. A value can be left over or set
+# for every repo, so what counts is whether pre-push is there. A copy may have lost the
+# mode, so it needn't be executable. Git reads a relative path from the top of the worktree.
+hooks_path_has_hooks() {
+  case $1 in
+    /*) hp_folder=$1 ;;
+    *)
+      hp_top=$(git -C "$session_folder" rev-parse --show-toplevel 2>/dev/null) || return 1
+      hp_folder=$hp_top/$1
+      ;;
+  esac
+  [ -f "$hp_folder/pre-push" ]
+}
+
+known_tool_hook_there() {
   for hook_name in commit-msg pre-commit pre-push; do
     if [ -f "$hooks_folder/$hook_name" ] && [ -x "$hooks_folder/$hook_name" ] &&
       grep -Eiq "$known_hook_tools" "$hooks_folder/$hook_name" 2>/dev/null; then
       return 0
     fi
   done
+  return 1
+}
+
+check_git_hooks() {
+  find_git_folders || return 0
+  # --path reads ~ as git does.
+  hooks_path=$(git -C "$session_folder" config --path --get core.hooksPath 2>/dev/null)
+  if [ -n "$hooks_path" ]; then
+    hooks_path_has_hooks "$hooks_path" && return 0
+  else
+    known_tool_hook_there && return 0
+  fi
   say "git hooks aren't active here, so nothing checks commits or pushes. Turn them on: git config core.hooksPath .githooks (if there's no .githooks folder, run /dev-workflow:setup)."
 }
 
 # --- The project file against the plugin
 
 # Sets version_parts to the three numbers of a version, ignoring a pre-release or build
-# part, with missing numbers as 0. Returns 1 if it isn't a version.
+# part, with missing numbers as 0. Returns 1 if it isn't a version, which includes numbers
+# too long for the shell to compare.
 read_version() {
   rv_numbers=${1%%[-+]*}
   case $rv_numbers in
-    '' | .* | *. | *..* | *[!0-9.]*) return 1 ;;
+    '' | .* | *. | *..* | *[!0-9.]* | *[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]*) return 1 ;;
   esac
   rv_ifs=$IFS
   IFS=.
@@ -108,9 +137,9 @@ check_plugin_version() {
   if [ -z "$project_version" ]; then
     say ".claude/dev-workflow.json has no pluginVersion, so its setup can't be compared with the plugin's $plugin_version. Run /dev-workflow:setup."
   elif ! read_version "$project_version"; then
-    say ".claude/dev-workflow.json has a pluginVersion that isn't a version ($project_version). Run /dev-workflow:setup."
+    say ".claude/dev-workflow.json has a pluginVersion that isn't a version. Run /dev-workflow:setup."
   elif version_is_older "$version_parts" "$plugin_parts"; then
-    say "this project was set up with version $project_version of the plugin, and $plugin_version is installed. Run /dev-workflow:setup to upgrade it."
+    say "this project was set up with an older version of the plugin, and $plugin_version is installed. Run /dev-workflow:setup to upgrade it."
   fi
 }
 
@@ -144,7 +173,7 @@ check_plugins() {
             (.scope != "project" and .scope != "local")
             or .projectPath == $here or .projectPath == $main))
           | .key | split("@")[0]) | join("\n")' "$registry" 2>/dev/null); then
-      say "couldn't read $registry, so the plugins this project relies on weren't checked."
+      say "couldn't read installed_plugins.json, so the plugins this project relies on weren't checked."
       return 0
     fi
   fi

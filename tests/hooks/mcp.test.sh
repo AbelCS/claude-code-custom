@@ -64,7 +64,9 @@ for name in \
   mcp__github__merge_pull_request \
   mcp__github-enterprise__issue_write \
   mcp__claude_ai_GitHub__x \
-  mcp__claude_ai_Github__create_pull_request; do
+  mcp__claude_ai_Github__create_pull_request \
+  mcp__GITHUB__x \
+  mcp__claude_ai_gitHUB__x; do
   assert_exit 0 matched "$name"
 done
 for name in Bash Write mcp__plugin_vercel_vercel__list_projects github mcp_github_x; do

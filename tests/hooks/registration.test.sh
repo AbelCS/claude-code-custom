@@ -53,7 +53,7 @@ matcher_of() {
 }
 assert_exit 0 test "$(matcher_of hook-bash.sh)" = 'Bash'
 assert_exit 0 test "$(matcher_of hook-workflow-edit.sh)" = 'Write|Edit'
-assert_exit 0 test "$(matcher_of hook-github-mcp.sh)" = 'mcp__.*[Gg]it[Hh]ub.*'
+assert_exit 0 test "$(matcher_of hook-github-mcp.sh)" = 'mcp__.*[Gg][Ii][Tt][Hh][Uu][Bb].*'
 
 # --- plugin.json
 
