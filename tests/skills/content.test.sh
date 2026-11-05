@@ -115,6 +115,37 @@ REFS
 done
 [ "$found" -gt 0 ] || _assert_fail "no skills found in $SKILLS"
 
+# --- skills only a person starts: Claude never loads them on its own
+
+for skill in maintain enable-releases; do
+  file="$SKILLS/$skill/SKILL.md"
+  [ -f "$file" ] || _assert_fail "no skill $skill"
+  frontmatter "$file" | grep -qx 'disable-model-invocation: true' ||
+    _assert_fail "$skill doesn't have disable-model-invocation: true"
+done
+
+# --- enable-releases' templates: the release runs by hand, and the optional check only
+# on release-please's pull requests, read with the same detector pre-commit uses
+
+TEMPLATES="$SKILLS/enable-releases/templates"
+# shellcheck source=plugins/dev-workflow/skills/setup/templates/githooks/dw-lib.sh
+. "$ROOT/plugins/dev-workflow/skills/setup/templates/githooks/dw-lib.sh"
+for t in release-please.yml release-check.yml release-please-config.json release-please-manifest.json; do
+  [ -f "$TEMPLATES/$t" ] || _assert_fail "enable-releases has no template $t"
+done
+release=$(cat "$TEMPLATES/release-please.yml")
+assert_contains "$release" "workflow_dispatch"
+triggers=$(dw_ci_triggers "$release") || _assert_fail "the trigger detector failed on release-please.yml"
+[ -z "$triggers" ] || _assert_fail "release-please.yml has the per-PR triggers: $triggers"
+assert_contains "$release" "googleapis/release-please-action@"
+check=$(cat "$TEMPLATES/release-check.yml")
+triggers=$(dw_ci_triggers "$check") || _assert_fail "the trigger detector failed on release-check.yml"
+[ "$triggers" = pull_request ] || _assert_fail "release-check.yml should run on pull_request alone, not: $triggers"
+assert_contains "$check" "if: startsWith(github.head_ref, 'release-please--')"
+for t in release-please-config.json release-please-manifest.json; do
+  jq -e . "$TEMPLATES/$t" >/dev/null 2>&1 || _assert_fail "$t isn't JSON"
+done
+
 # --- what each skill's rules must say, one "skill|text" a line, in any capitals, so
 # a rule can start a sentence
 
@@ -243,4 +274,55 @@ choose-stack|${CLAUDE_PLUGIN_ROOT}/stacks/
 setup|/dev-workflow:choose-stack
 setup|${CLAUDE_PLUGIN_ROOT}/stacks/<name>.md
 setup|only the chosen stacks' files
+maintain|clean, updated
+maintain|one issue and one squash-merged pull request per area
+maintain|verify
+maintain|Branches
+maintain|Dead code
+maintain|Dependencies
+maintain|Code smells
+maintain|Docs
+maintain|Methodology
+maintain|${CLAUDE_PLUGIN_ROOT}/scripts/maintain/merged-branches.sh
+maintain|git worktree remove
+maintain|never --force
+maintain|git worktree prune
+maintain|List everything else
+maintain|deadCode
+maintain|If none is configured, say so
+maintain|migration guide
+maintain|audit
+maintain|since the last run
+maintain|/simplify
+maintain|/code-review
+maintain|README
+maintain|Finished plans
+maintain|met but still open
+maintain|run.sh
+maintain|docs/maintenance.md
+maintain|- YYYY-MM-DD: what was done
+maintain|${user_config.maintenance_interval_days}
+maintain|money rules or permissions
+maintain|placeholder rather than a value
+enable-releases|github.com
+enable-releases|Conventional Commits
+enable-releases|Stop and ask before overwriting
+enable-releases|package.json` at the root: `node`
+enable-releases|pyproject.toml
+enable-releases|setup.py
+enable-releases|Cargo.toml
+enable-releases|go.mod
+enable-releases|composer.json
+enable-releases|`simple`
+enable-releases|ask which
+enable-releases|0.1.0
+enable-releases|gh api repos/googleapis/release-please-action/releases/latest
+enable-releases|current major version
+enable-releases|workflow_dispatch
+enable-releases|ciAllowlist
+enable-releases|release-please--
+enable-releases|GITHUB_TOKEN
+enable-releases|Allow GitHub Actions to create and approve pull requests
+enable-releases|${CLAUDE_SKILL_DIR}/templates/
+enable-releases|Existing workflows
 TABLE

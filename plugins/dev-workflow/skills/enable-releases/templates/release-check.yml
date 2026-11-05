@@ -1,0 +1,21 @@
+# Optional: runs the project's checks on release-please's own pull requests, and on no
+# other. Its pull_request trigger is why it's in ciAllowlist: CI runs only for releases.
+name: release-check
+
+on:
+  pull_request:
+    branches:
+      - <DEFAULT_BRANCH>
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    if: startsWith(github.head_ref, 'release-please--')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@<CHECKOUT_MAJOR>
+      # <SETUP_STEPS>: what the check needs installed, such as the language's setup
+      # action and the project's dependencies.
+      - run: <CHECK_COMMAND>

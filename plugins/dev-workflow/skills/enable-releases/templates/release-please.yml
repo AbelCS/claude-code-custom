@@ -1,0 +1,23 @@
+# Opens or updates the release pull request, and tags the release once that pull
+# request is merged. It runs only when started by hand, from the Actions tab or with
+# `gh workflow run release-please.yml`: CI runs only for releases.
+name: release-please
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+
+jobs:
+  release-please:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: googleapis/release-please-action@<ACTION_MAJOR>
+        with:
+          token: ${{ secrets.<TOKEN_SECRET> }}
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
+          target-branch: <DEFAULT_BRANCH>
