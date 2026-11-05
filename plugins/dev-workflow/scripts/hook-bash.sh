@@ -74,6 +74,16 @@ matches_any() {
   return 1
 }
 
+# Sets session_folder to where the session's shell is, from the input, or else the
+# project's folder. Commands run from there, and with worktrees it can be another branch.
+find_session_folder() {
+  session_folder=$(dw_input '.cwd | strings' 2>/dev/null)
+  case $session_folder in
+    /*) [ -d "$session_folder" ] || session_folder=$DW_PROJECT_DIR ;;
+    *) session_folder=$DW_PROJECT_DIR ;;
+  esac
+}
+
 # --- Database resets
 
 # docker compose down with -v removes the volumes, wherever its options sit.
@@ -132,6 +142,7 @@ commands=$(normal_commands "$command_text") || dw_deny "dev-workflow: couldn't r
 
 test_seen=
 ask_reason=
+branch_moves=
 
 # Not a pipeline: that would run the loop in a subshell, losing test_seen and leaving a
 # denial to end only the loop.

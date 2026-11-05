@@ -295,3 +295,27 @@ expect_words 'a $(b c) d' 'b|c|' 'a|$(b c)|d|'
 expect_words 'a "$(b "c d")" e' 'b|"c d"|' 'a|"$(b "c d")"|e|'
 expect_words 'a 2>&1 b' 'a|2>&1|b|'
 expect_words "a <<EOF${nl}it's${nl}EOF${nl}b c" 'a|<<EOF|' 'b|c|'
+
+# A redirection starts a word of its own, even joined to the one before.
+expect_words 'a>out b' 'a|>out|b|'
+expect_words 'a>>out' 'a|>>out|'
+expect_words 'a>out>err' 'a|>out|>err|'
+expect_words 'a&>out' 'a|&>out|'
+expect_words 'a>&2' 'a|>&2|'
+expect_words 'a<in' 'a|<in|'
+expect_words 'a<>f' 'a|<>f|'
+expect_words 'a>|f' 'a|>|f|'
+expect_words '"">out' '""|>out|'
+expect_words 'a<<<text' 'a|<<<text|'
+expect_words "a -<<EOF${nl}x${nl}EOF" 'a|-|<<EOF|'
+# File descriptors stay with it, when they are the whole word before it.
+expect_words 'a 2>out' 'a|2>out|'
+expect_words 'a 2>&1' 'a|2>&1|'
+expect_words 'a2>out' 'a2|>out|'
+# Not outside its quotes, a substitution or a process substitution.
+expect_words 'a "b>c"' 'a|"b>c"|'
+expect_words 'a b\>c' 'a|b\>c|'
+expect_words 'a "$(b >c)"d' 'b|>c|' 'a|"$(b >c)"d|'
+expect_words 'a --f=<(b)' 'b|' 'a|--f=<(b)|'
+# Without WORD_END the text is left as it was.
+expect 'a>out b' 'a>out b'

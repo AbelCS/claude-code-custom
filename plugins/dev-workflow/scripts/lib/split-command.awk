@@ -9,7 +9,8 @@
 #
 # With -v WORD_END=<byte>, each word on a line ends with that byte in place of the spaces
 # around it, still with its quotes, so that what reads the words needn't find their edges
-# again, which takes all of the grammar here.
+# again, which takes all of the grammar here. A redirection is then a word of its own
+# even when joined to the one before, as in a>out, with a file descriptor kept on it.
 #
 # What splits and what doesn't:
 # - &&, ||, ;, |, |&, & and newlines split. 2>&1, &>out and >|out don't.
@@ -51,6 +52,8 @@ function commands(i, closer,    c, n, saved_cur, saved_word, saved_fresh, saved_
   while (i <= L) {
     c = substr(S, i, 1)
     n = substr(S, i + 1, 1)
+
+    if (WORD_END != "" && word != "" && opens_redirection(c, n)) end_word()
 
     if (c == "#" && word == "") {
       while (i <= L && substr(S, i, 1) != "\n") i++
@@ -117,6 +120,18 @@ function commands(i, closer,    c, n, saved_cur, saved_word, saved_fresh, saved_
   heredoc_count = heredoc_base
   heredoc_base = saved_base
   return i
+}
+
+# Whether an unquoted c, followed by n, starts a redirection apart from the word being
+# built. That word may be its file descriptor, or the redirection's own start.
+function opens_redirection(c, n) {
+  if (c == "&") {
+    if (n != ">") return 0
+  } else if (c != "<" && c != ">") {
+    return 0
+  }
+  if (n == "(") return 0
+  return word !~ /^[0-9]+$/ && word !~ /^[0-9]*[&<>][<>&|]*$/
 }
 
 # Finishes the word being built. While no command has started, it may be something

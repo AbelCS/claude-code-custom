@@ -7,9 +7,13 @@
 #   Text inside a substitution may lose quote characters, which no rule depends on.
 # - Redirections are gone, wherever they are, except heredocs and here-strings, whose
 #   words start with <<, so a rule can tell that stdin holds text.
-# - Leading VAR=value words and the prefixes env, sudo, command, exec and nohup are gone,
-#   with their options. `command -v` only asks about a command, so it stays as it is.
-# - git and gh lose a path to them and their own options before the subcommand.
+# - Leading VAR=value words and the prefixes env, sudo, command, exec, nohup, timeout and
+#   nice are gone, with their options. `command -v` only asks about a command, so it
+#   stays as it is.
+# - sh or bash running a script comes down to the script. With -c or -s it stays, as what
+#   runs can't be read from here.
+# - git and gh lose a path to them and their own options before the subcommand, except
+#   git's -C, which says where it acts.
 # - Any other command loses a leading ./ or path to the project's root, as in
 #   ./scripts/check, so that it compares with how the project file names it.
 #
@@ -22,6 +26,8 @@ BEGIN {
   ENV_VALUE = "^(-[A-Za-z]*[uCSP]|--unset|--chdir|--split-string)$"
   SUDO_VALUE = "^(-[A-Za-z]*[ugUhpCrtTDR]|--(user|group|other-user|host|prompt|close-from|role|type|command-timeout|chdir|chroot))$"
   EXEC_VALUE = "^-[cl]*a$"
+  TIMEOUT_VALUE = "^(-k|-s|--kill-after|--signal)$"
+  NICE_VALUE = "^(-n|--adjustment)$"
   GIT_VALUE = "^(-C|-c|--git-dir|--work-tree|--namespace|--super-prefix|--config-env)$"
   GH_VALUE = "^(-R|--repo|--hostname)$"
 }
@@ -39,12 +45,13 @@ BEGIN {
     }
   }
 
+  is_script = 0
   first = after_prefixes(1)
   if (first > n) next
 
-  name = base(words[first])
+  name = is_script ? "" : base(words[first])
   if (name == "git") {
-    print_command("git", after_git_options(first + 1))
+    print_git(first + 1)
   } else if (name == "gh") {
     print_gh(first + 1)
   } else if (name ~ /^(dropdb|docker|docker-compose)$/) {
@@ -72,7 +79,7 @@ function is_redirection(word) {
 }
 
 # The position of the first word after any assignments and prefixes.
-function after_prefixes(p,    name) {
+function after_prefixes(p,    name, script) {
   while (p <= n) {
     name = base(words[p])
     if (words[p] ~ /^[A-Za-z_][A-Za-z0-9_]*[+]?=/) p++
@@ -80,6 +87,14 @@ function after_prefixes(p,    name) {
     else if (name == "sudo") p = after_options(p + 1, SUDO_VALUE)
     else if (name == "exec") p = after_options(p + 1, EXEC_VALUE)
     else if (name == "nohup") p++
+    else if (name == "timeout") p = after_options(p + 1, TIMEOUT_VALUE) + 1
+    else if (name == "nice") p = after_options(p + 1, NICE_VALUE)
+    else if (name == "sh" || name == "bash") {
+      script = shell_script(p + 1)
+      if (!script) break
+      is_script = 1
+      return script
+    }
     else if (name == "command" && words[p + 1] !~ /^-p*[vV]/) p = after_options(p + 1, "^$")
     else break
   }
@@ -96,8 +111,25 @@ function after_options(p, value_flags) {
   return p
 }
 
-function after_git_options(p) {
-  return after_options(p, GIT_VALUE)
+# The position of the script a shell runs, or 0 if it doesn't run one.
+function shell_script(p) {
+  while (p <= n && words[p] ~ /^[-+]/) {
+    if (words[p] ~ /^-[A-Za-z]*[cs]/) return 0
+    if (words[p] == "--") return (p < n) ? p + 1 : 0
+    if (words[p] ~ /^[-+]o$|^--(rcfile|init-file)$/) p++
+    p++
+  }
+  return (p <= n) ? p : 0
+}
+
+function print_git(p,    name_words) {
+  name_words = "git"
+  while (p <= n && words[p] ~ /^-/) {
+    if (words[p] == "-C" && p < n) name_words = name_words END_OF_WORD "-C" END_OF_WORD words[p + 1]
+    if (words[p] ~ GIT_VALUE) p++
+    p++
+  }
+  print_command(name_words, p)
 }
 
 function print_command(name, p,    i, line) {

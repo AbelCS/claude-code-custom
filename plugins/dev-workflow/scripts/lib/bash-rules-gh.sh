@@ -3,7 +3,7 @@
 # command_text to the raw command. Each check takes the words after gh and ends the
 # script if it denies. Source this file; don't run it.
 #
-# shellcheck disable=SC2034,SC2154 # hook-bash.sh sets and reads the variables named above.
+# shellcheck disable=SC2034,SC2154 # hook-bash.sh sets and reads these variables.
 
 # The text as GitHub would show it. People and tools write \n in a body and mean a line.
 readable_text() {
@@ -46,12 +46,8 @@ read_body_file() {
     /*) bf_path=$1 ;;
     \~/*) bf_path=$HOME/${1#\~/} ;;
     *)
-      bf_base=$(dw_input '.cwd | strings' 2>/dev/null)
-      case $bf_base in
-        /*) [ -d "$bf_base" ] || bf_base=$DW_PROJECT_DIR ;;
-        *) bf_base=$DW_PROJECT_DIR ;;
-      esac
-      bf_path=$bf_base/$1
+      find_session_folder
+      bf_path=$session_folder/$1
       ;;
   esac
   if [ -f "$bf_path" ] && [ -r "$bf_path" ] && bf_text=$(cat -- "$bf_path"); then
