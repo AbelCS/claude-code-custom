@@ -145,35 +145,19 @@ rule deny issue_reader "{\"text\": $attributed}" 'attribution'
 
 # --- Merge tools
 
-squash='"owner": "o", "repo": "r", "pullNumber": 1, "merge_method": "squash"'
-rule none merge_pull_request "{$squash, \"commit_message\": \"\"}"
-rule none merge_pull_request "{$squash, \"commit_title\": \"feat: x (#1)\", \"commit_message\": \"\"}"
-# Without one, GitHub uses the message it's configured with.
-rule deny merge_pull_request "{$squash}" 'commit_message'
-rule deny merge_pull_request "{$squash, \"commit_title\": \"feat: x (#1)\"}" 'commit_message'
-rule deny merge_pull_request "{$squash, \"commit_message\": null}" 'commit_message'
-
-rule deny merge_pull_request '{"pullNumber": 1}' 'squash'
-rule deny merge_pull_request '{"merge_method": "merge"}' 'squash'
-rule deny merge_pull_request '{"merge_method": "rebase"}' 'squash'
-rule deny merge_pull_request '{"merge_method": "Squash"}' 'squash'
-rule deny merge_pull_request '{"merge_method": ["squash"]}' 'squash'
-rule deny merge_pull_request "{$squash, \"commit_message\": \"text\"}" 'squash'
-rule deny merge_pull_request "{$squash, \"commit_message\": \" \"}" 'squash'
-rule deny merge_pull_request "{$squash, \"commit_message\": 1}" 'squash'
-rule deny merge_pull_request '{"merge_method": "squash", "commit_message": false}' 'squash'
-rule deny merge_pull_request '{"commit_message": "", "commit_title": "feat: x"}' 'squash'
-
-# A title becomes a commit no git hook sees, and every other field still counts.
-rule deny merge_pull_request "{$squash, \"commit_title\": \"Generated with Claude Code\"}" 'attribution'
-rule deny merge_pull_request "{$squash, \"other\": [$attributed]}" 'attribution'
+# The server hands commit_message to go-github's Merge, which drops an empty one, so GitHub
+# uses its default message whatever these fields say. No call can do what the rule asks.
+squash='{"owner": "o", "repo": "r", "pullNumber": 1, "merge_method": "squash", "commit_message": ""}'
+rule deny merge_pull_request "$squash" \
+  'gh pr merge <n> --squash --subject "<title>" --body "" --delete-branch'
+rule deny merge_pull_request "$squash" 'default message'
+rule deny merge_pull_request '{"merge_method": "squash", "commit_title": "feat: x (#1)", "commit_message": ""}' 'gh pr merge'
+rule deny merge_pull_request '{}' 'gh pr merge'
 
 # Any name with both words, by any prefix.
-rule deny pull_request_merge '{"merge_method": "merge"}' 'squash'
-rule deny merge_pull_request_now '{"merge_method": "merge"}' 'squash'
-rule deny merge_pull_request_now "{$squash}" 'commit_message'
-rule none merge_pull_request_now "{$squash, \"commit_message\": \"\"}"
-assert_decision deny "$hook" "$(tool_input mcp__github__merge_pull_request '{"merge_method": "merge"}')"
+rule deny pull_request_merge '{}' 'gh pr merge'
+rule deny merge_pull_request_now "$squash" 'gh pr merge'
+assert_contains "$(reason_of "$hook" "$(tool_input mcp__github__merge_pull_request "$squash")")" 'gh pr merge'
 # Without both, it isn't one.
 rule none update_pull_request '{"merge_method": "merge"}'
 rule none update_pull_request_branch '{"pullNumber": 1}'
@@ -182,7 +166,8 @@ rule none merge_branches '{"merge_method": "merge"}'
 # --- Input it can't read
 
 assert_decision deny "$hook" 'not json'
-assert_decision deny "$hook" '{"tool_name": "mcp__github__merge_pull_request", "tool_input": "not an object"}'
+# A merge tool is denied before its fields are read.
+assert_contains "$(reason_of "$hook" '{"tool_name": "mcp__github__merge_pull_request", "tool_input": "not an object"}')" 'gh pr merge'
 assert_decision deny "$hook" '{"tool_name": "mcp__github__x", "tool_input": "Generated with Claude Code"}'
 assert_decision none "$hook" '{"tool_name": "mcp__github__x", "tool_input": "clean text"}'
 
