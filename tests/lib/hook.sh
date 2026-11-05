@@ -71,3 +71,35 @@ assert_decision() {
   fi
   [ "$_hook_decision" = "$1" ] || _assert_fail "expected $1, got \"$_hook_decision\" for: $3"
 }
+
+# hook_without_temp_files <script>: prints the path of a script that runs <script> with
+# macOS's sh where nothing can be written, so that sh can't create a heredoc's temp file.
+# An unwritable TMPDIR alone isn't enough, as that sh then falls back to /tmp and the
+# current folder. Prints nothing where this can't be arranged, as on another system.
+hook_without_temp_files() {
+  command -v sandbox-exec >/dev/null 2>&1 && [ -x /bin/sh ] || return 0
+  _hook_profile='(version 1)(allow default)(deny file-write* (subpath "/"))(allow file-write* (literal "/dev/null"))'
+  _hook_probe=$(sandbox-exec -p "$_hook_profile" /bin/sh -c 'cat <<EOF
+ran
+EOF' 2>/dev/null)
+  [ "$_hook_probe" != ran ] || return 0
+  _hook_wrapper="$(tmp_dir)/without-temp-files.sh"
+  cat >"$_hook_wrapper" <<WRAPPER
+#!/bin/sh
+exec sandbox-exec -p '$_hook_profile' /bin/sh "$1" 2>/dev/null
+WRAPPER
+  printf '%s\n' "$_hook_wrapper"
+}
+
+# failing_tool <folder> <tool> <with output?>: makes <tool> in <folder>, which holds links to
+# real tools, exit 1. With output, it first does its real work, so only the status tells.
+failing_tool() {
+  _hook_real=$(command -v "$2") || _assert_fail "no $2 to stub"
+  rm -f "$1/$2"
+  if [ -n "${3:-}" ]; then
+    printf '#!/bin/sh\n"%s" "$@"\nexit 1\n' "$_hook_real" >"$1/$2"
+  else
+    printf '#!/bin/sh\nexit 1\n' >"$1/$2"
+  fi
+  chmod +x "$1/$2"
+}

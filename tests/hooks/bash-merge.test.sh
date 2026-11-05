@@ -322,6 +322,104 @@ rule deny 'cd && git merge main' 'separately'
 HOME=$real_home
 on_branch feat/1-x
 
+# --- git pull, which merges what it names
+
+on_branch main
+rule deny 'git pull --no-rebase . feat/1-x' 'main'
+rule deny 'git pull . feat/1-x' 'main'
+rule deny 'git pull origin feat/1-x' 'main'
+rule deny 'git pull --no-ff origin feat/1-x' 'main'
+rule deny 'git pull --ff-only --no-ff . feat/1-x' 'main'
+rule deny 'git pull --rebase --no-rebase . feat/1-x' 'main'
+rule deny 'git pull --rebase=false . feat/1-x' 'main'
+rule deny 'git pull origin main feat/1-x' 'main'
+rule deny 'git pull . "$BRANCH"' 'main'
+rule deny 'git pull -X ours . feat/1-x' 'main'
+rule deny 'git pull -s ours . feat/1-x' 'main'
+rule deny 'git pull --depth 1 . feat/1-x' 'main'
+rule deny 'git -c a=b pull . feat/1-x' 'main'
+rule deny 'git -C sub pull . feat/1-x' 'main'
+rule deny 'env A=1 git pull . feat/1-x' 'main'
+# Naming nothing, or the default branch, or not merging.
+rule none 'git pull'
+rule none 'git pull --ff-only'
+rule none 'git pull --no-rebase'
+rule none 'git pull origin'
+rule none 'git pull --no-rebase origin'
+rule none 'git pull origin main'
+rule none 'git pull --no-rebase origin main'
+rule none 'git pull origin refs/heads/main'
+rule none 'git pull origin main:main'
+rule none 'git pull origin +main'
+rule none 'git pull --ff-only origin feat/1-x'
+rule none 'git pull --ff-only . feat/1-x'
+rule none 'git pull --rebase origin feat/1-x'
+rule none 'git pull -r . feat/1-x'
+rule none 'git pull --rebase=merges . feat/1-x'
+rule none 'git pull --help'
+rule none 'git pull -s ours'
+rule none 'git log --grep="git pull . feat/1-x"'
+rule none 'echo git pull . feat/1-x'
+
+# On a work branch it's allowed, and a move decides which branch that is.
+on_branch feat/1-x
+rule none 'git pull --no-rebase . feat/2-y'
+rule none 'git pull origin feat/2-y'
+rule none 'git pull origin main'
+rule none 'git pull'
+rule none 'git pull --ff-only'
+rule deny 'git switch main && git pull --no-rebase . feat/1-x' 'main'
+rule deny 'git checkout main && git pull . feat/1-x' 'main'
+rule deny 'git switch main; git pull origin feat/1-x' 'main'
+rule none 'git switch main && git pull'
+rule none 'git switch main && git pull --ff-only'
+rule none 'git switch main && git pull origin main'
+rule deny 'git switch "$BRANCH" && git pull . feat/2-y' 'separately'
+rule none 'git switch "$BRANCH" && git pull'
+on_branch main
+rule none 'git switch feat/1-x && git pull --no-rebase . feat/2-y'
+on_branch feat/1-x
+
+# Through a cd, or a folder that can't be told.
+on_branch main
+cd "$worktree" || exit 1
+rule none 'git pull --no-rebase . feat/1-x'
+rule deny "cd \"$repo\" && git pull --no-rebase . feat/1-x" 'main'
+rule deny "git -C \"$repo\" pull . feat/1-x" 'main'
+cd "$repo" || exit 1
+rule none "cd \"$worktree\" && git pull --no-rebase . feat/1-x"
+rule none "git -C \"$worktree\" pull . feat/1-x"
+on_branch feat/1-x
+rule deny 'cd "$X" && git pull . feat/2-y' 'separately'
+rule deny 'git -C "$X" pull . feat/2-y' 'separately'
+rule none 'cd "$X" && git pull'
+rule none 'cd "$X" && git pull --ff-only'
+
+# It's a merge for the rule on tests, on any branch.
+for branch in main feat/1-x; do
+  on_branch "$branch"
+  rule deny 'npm run check && git pull --no-rebase . feat/2-y'
+  rule deny 'scripts/verify && git pull . feat/2-y'
+  rule deny 'npx vitest; git pull origin feat/2-y'
+  rule none 'npm run check && git pull'
+  rule none 'npm run check && git pull --ff-only'
+  rule none 'npm run check && git pull origin main'
+  rule none 'npm run check && git pull --rebase origin feat/2-y'
+done
+on_branch feat/1-x
+rule deny 'npm run check && git pull --no-rebase . feat/2-y' 'test'
+rule none 'git pull --no-rebase . feat/2-y && npm run check'
+
+# The default branch comes from origin/HEAD here too.
+git -C "$repo" symbolic-ref refs/remotes/origin/HEAD refs/remotes/origin/trunk
+on_branch trunk
+rule deny 'git pull origin main' 'trunk'
+rule none 'git pull origin trunk'
+on_branch main
+rule none 'git pull origin main'
+git -C "$repo" symbolic-ref --delete refs/remotes/origin/HEAD
+on_branch feat/1-x
+
 # --- What landing and updating use stays clean, wherever the session is
 
 landing='gh pr merge 7 --squash --subject "chore: x (#2)" --body "" --delete-branch'

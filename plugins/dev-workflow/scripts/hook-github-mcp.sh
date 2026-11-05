@@ -37,8 +37,9 @@ deny_attribution "$text"
 
 case $tool in
   *merge*pull_request* | *pull_request*merge*)
-    squash=$(dw_input '.tool_input | objects | .merge_method == "squash" and (.commit_message == null or .commit_message == "")' 2>/dev/null)
+    # Leaving commit_message out isn't enough, as GitHub then uses its configured default.
+    squash=$(dw_input '.tool_input | objects | .merge_method == "squash" and .commit_message == ""' 2>/dev/null)
     [ "$squash" = true ] ||
-      dw_deny "dev-workflow: merge with merge_method \"squash\" and no commit_message, so the commit has the pull request's title and no default message."
+      dw_deny "dev-workflow: merge with merge_method \"squash\" and an empty commit_message, so the commit has the pull request's title and no default message."
     ;;
 esac

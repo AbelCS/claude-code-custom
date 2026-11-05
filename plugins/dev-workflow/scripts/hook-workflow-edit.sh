@@ -130,11 +130,16 @@ dw_in_lines '?' "$triggers" && dw_ask "$cannot_read"
 known=$(dw_ci_triggers "$before") || known=
 dw_in_lines '?' "$known" && known=
 
+# A shell that can't create the heredoc's temp file doesn't run the loop and carries on, so
+# loop_ran tells that apart from gaining nothing.
 gained=
+loop_ran=
 while IFS= read -r trigger; do
+  loop_ran=1
   dw_in_lines "$trigger" "$known" || gained="$gained${gained:+, }$trigger"
 done <<TRIGGERS
 $triggers
 TRIGGERS
+[ -n "$loop_ran" ] || dw_deny "dev-workflow: the shell couldn't compare the triggers of $relative, so this can't be checked. It may have no folder it can write temp files to."
 [ -z "$gained" ] ||
   dw_ask "dev-workflow: this gives $relative a trigger on $gained, and CI runs only for releases, so it needs a person's yes. Use workflow_dispatch, or add the file to ciAllowlist in .claude/dev-workflow.json and run the setup skill."

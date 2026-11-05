@@ -294,6 +294,56 @@ check_git_merge() {
   if [ -n "$gm_ff_only" ] && [ -z "$gm_elsewhere" ]; then
     return 0
   fi
+  deny_merge_here
+}
+
+read_git_pull_flag() {
+  case $1 in
+    --help | -h) gp_help=1 ;;
+    --ff-only) gp_ff_only=1 ;;
+    --ff | --no-ff) gp_ff_only= ;;
+    --rebase | -r)
+      case ${2-true} in
+        false | no | off | 0) gp_rebase= ;;
+        *) gp_rebase=1 ;;
+      esac
+      ;;
+    --no-rebase) gp_rebase= ;;
+    '')
+      # The first word is the repository, and the rest what to merge from it.
+      gp_words=$((gp_words + 1))
+      if [ "$gp_words" -gt 1 ]; then
+        gp_ref=${2#+}
+        case ${gp_ref%%:*} in
+          "$default_branch" | "heads/$default_branch" | "refs/heads/$default_branch") ;;
+          *) gp_elsewhere=1 ;;
+        esac
+      fi
+      ;;
+  esac
+}
+
+# A pull is how a branch catches up, unless it names something else to merge, which is a
+# merge like git merge. What's named can be local, as in git pull . feat/1-x.
+check_git_pull() {
+  find_git_folder
+  find_default_branch
+  gp_help=
+  gp_ff_only=
+  gp_rebase=
+  gp_words=0
+  gp_elsewhere=
+  walk_flags '--strategy --strategy-option --depth --deepen --shallow-since --shallow-exclude --server-option --upload-pack --jobs --negotiation-tip --refmap --into-name' \
+    sXoj S read_git_pull_flag "$@"
+  if [ -n "$gp_help" ] || [ -n "$gp_ff_only" ] || [ -n "$gp_rebase" ] || [ -z "$gp_elsewhere" ]; then
+    return 0
+  fi
+  deny_merge_here
+}
+
+# For a real merge in the folder find_git_folder found: counts it for the rule on tests,
+# and ends the script if it lands on the default branch, or could.
+deny_merge_here() {
   merging=1
   find_branch_now
   if [ -n "$git_unknown" ] || [ -n "$move_unknown" ] || [ "$branch_now" = "$unknown_branch" ]; then
@@ -324,6 +374,7 @@ check_git() {
       ;;
     push) walk_flags '--repo --push-option --receive-pack --exec' o '' read_push_flag "$@" ;;
     merge) check_git_merge "$@" ;;
+    pull) check_git_pull "$@" ;;
     switch) check_git_switch "$@" ;;
     checkout) check_git_checkout "$@" ;;
   esac

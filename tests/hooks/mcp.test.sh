@@ -146,10 +146,12 @@ rule deny issue_reader "{\"text\": $attributed}" 'attribution'
 # --- Merge tools
 
 squash='"owner": "o", "repo": "r", "pullNumber": 1, "merge_method": "squash"'
-rule none merge_pull_request "{$squash}"
-rule none merge_pull_request "{$squash, \"commit_title\": \"feat: x (#1)\"}"
+rule none merge_pull_request "{$squash, \"commit_message\": \"\"}"
 rule none merge_pull_request "{$squash, \"commit_title\": \"feat: x (#1)\", \"commit_message\": \"\"}"
-rule none merge_pull_request "{$squash, \"commit_message\": null}"
+# Without one, GitHub uses the message it's configured with.
+rule deny merge_pull_request "{$squash}" 'commit_message'
+rule deny merge_pull_request "{$squash, \"commit_title\": \"feat: x (#1)\"}" 'commit_message'
+rule deny merge_pull_request "{$squash, \"commit_message\": null}" 'commit_message'
 
 rule deny merge_pull_request '{"pullNumber": 1}' 'squash'
 rule deny merge_pull_request '{"merge_method": "merge"}' 'squash'
@@ -169,7 +171,8 @@ rule deny merge_pull_request "{$squash, \"other\": [$attributed]}" 'attribution'
 # Any name with both words, by any prefix.
 rule deny pull_request_merge '{"merge_method": "merge"}' 'squash'
 rule deny merge_pull_request_now '{"merge_method": "merge"}' 'squash'
-rule none merge_pull_request_now "{$squash}"
+rule deny merge_pull_request_now "{$squash}" 'commit_message'
+rule none merge_pull_request_now "{$squash, \"commit_message\": \"\"}"
 assert_decision deny "$hook" "$(tool_input mcp__github__merge_pull_request '{"merge_method": "merge"}')"
 # Without both, it isn't one.
 rule none update_pull_request '{"merge_method": "merge"}'
@@ -223,6 +226,23 @@ HOOK_PATH=$fake_tools
 assert_decision deny "$hook" "$clean_input"
 assert_contains "$(reason_of "$hook" "$clean_input")" 'attribution'
 unset HOOK_PATH
+
+# Any stage of reading the text failing means it can't be told, whatever grep says after.
+attributed_input=$(tool_input mcp__github__add_issue_comment '{"body": "Generated with Claude Code"}')
+for failing in tr sed; do
+  for with_output in '' 1; do
+    stubs=$(tmp_dir)
+    for tool in jq sed tr cat grep; do
+      ln -s "$(command -v "$tool")" "$stubs/$tool"
+    done
+    failing_tool "$stubs" "$failing" "$with_output"
+    HOOK_PATH=$stubs
+    assert_decision deny "$hook" "$attributed_input"
+    assert_decision deny "$hook" "$clean_input"
+    assert_contains "$(reason_of "$hook" "$clean_input")" 'attribution'
+    unset HOOK_PATH
+  done
+done
 
 partial="$(tmp_dir)/partial"
 mkdir -p "$partial/scripts/lib"

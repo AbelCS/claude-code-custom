@@ -47,8 +47,8 @@ _dw_attribution="$_dw_attribution|(^|$_dw_not)$_dw_generated$_dw_not+((the|a|an|
 _dw_attribution="$_dw_attribution|^$_dw_not*$(printf '\360\237\244\226')"
 
 # dw_has_attribution [file]: reads the file, or stdin with no argument, exactly as it is.
-# An empty name is a file it can't read. Comments only exist in commit messages, so
-# removing them is up to commit-msg. Exits 0 if found, 1 if not, and above 1 if it
+# An empty name is a file it can't read. It knows nothing of comments, so which lines count
+# is up to the caller. Exits 0 if found, 1 if not, and above 1 if it
 # couldn't read the text, which callers must not take as clean. It matches bytes, so the
 # emoji works in any locale.
 dw_has_attribution() {

@@ -171,8 +171,11 @@ walk_folder=
 walk_unknown=
 
 # Not a pipeline: that would run the loop in a subshell, losing test_seen and leaving a
-# denial to end only the loop.
+# denial to end only the loop. A shell that can't create the heredoc's temp file doesn't
+# run the loop and carries on, so loop_ran tells that apart from a clean command.
+loop_ran=
 while IFS= read -r line; do
+  loop_ran=1
   [ -n "$line" ] || continue
   IFS=$word_end
   # shellcheck disable=SC2086 # Splitting on word_end is the point, and set -f is on.
@@ -192,6 +195,7 @@ while IFS= read -r line; do
 done <<COMMANDS
 $commands
 COMMANDS
+[ -n "$loop_ran" ] || dw_deny "dev-workflow: the shell couldn't read this command's parts, so it can't be checked. It may have no folder it can write temp files to."
 
 # Last, so that a denial later in the command isn't lost behind an answer of yes.
 [ -z "$ask_reason" ] || dw_ask "$ask_reason"

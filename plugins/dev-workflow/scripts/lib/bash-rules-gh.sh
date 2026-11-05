@@ -30,14 +30,20 @@ read_body_file() {
     /*) bf_path=$1 ;;
     \~/*) bf_path=$HOME/${1#\~/} ;;
     *)
-      dw_session_folder
-      bf_path=$DW_SESSION_FOLDER/$1
+      # From where a cd earlier in the command left it, as for gh itself. A folder that
+      # can't be told leaves a file that can't be read.
+      find_walk_folder
+      if [ -n "$walk_unknown" ]; then
+        bf_path=
+      else
+        bf_path=$walk_folder/$1
+      fi
       ;;
   esac
   if [ -f "$bf_path" ] && [ -r "$bf_path" ] && bf_text=$(cat -- "$bf_path"); then
     gt_body=$gt_body$newline$bf_text
   else
-    dw_deny "dev-workflow: can't read the file $1 to check its text. Name a readable file, in full or from the session's current folder."
+    dw_deny "dev-workflow: can't read the file $1 to check its text. Name a readable file, in full or from the folder the command is in, and not after a cd that can't be told from its text."
   fi
 }
 
@@ -106,7 +112,8 @@ check_gh_text() {
   # Text can reach a flag through a variable or a plain heredoc, so the raw command counts,
   # without the quotes that would close a variable's last line.
   deny_attribution "$gt_title$newline$gt_body"
-  deny_attribution "$(printf '%s\n' "$command_text" | tr -d "\"'")"
+  gt_raw=$(printf '%s\n' "$command_text" | tr -d "\"'") || deny_unchecked
+  deny_attribution "$gt_raw"
 
   case $gt_action in
     'pr create')
@@ -166,7 +173,9 @@ check_gh_api() {
   gt_inline_stdin=
   walk_flags "$ga_long" XfFHqtp '' read_gh_api_flag "$@"
   settle_gh_stdin
-  deny_attribution "$(printf '%s\n%s\n' "$gt_body" "$command_text" | tr '"' '\n' | tr "'" '\n')"
+  ga_text=$(printf '%s\n%s\n' "$gt_body" "$command_text" | tr '"' '\n') || deny_unchecked
+  ga_text=$(printf '%s\n' "$ga_text" | tr "'" '\n') || deny_unchecked
+  deny_attribution "$ga_text"
 }
 
 read_gh_merge_flag() {

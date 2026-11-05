@@ -380,6 +380,24 @@ HOOK_PATH=$fake_tools
 asks "$clean_input" 'read the triggers'
 unset HOOK_PATH
 
+# A heredoc the shell can't create leaves the hook's loop unrun, which gains no trigger.
+new_trigger=$(write_input "$workflow" 'on: pull_request')
+no_temp="$(tmp_dir)/no-temp"
+mkdir "$no_temp"
+chmod 555 "$no_temp"
+real_tmpdir=${TMPDIR:-}
+TMPDIR=$no_temp
+export TMPDIR
+output=$(printf '%s' "$new_trigger" | sh "$hook" 2>/dev/null)
+TMPDIR=$real_tmpdir
+assert_contains "$output" '"permissionDecision":"'
+chmod 755 "$no_temp"
+without_temp=$(hook_without_temp_files "$hook")
+if [ -n "$without_temp" ]; then
+  assert_decision deny "$without_temp" "$new_trigger"
+  assert_contains "$(reason_of "$without_temp" "$new_trigger")" "can't be checked"
+fi
+
 partial="$(tmp_dir)/partial"
 mkdir -p "$partial/scripts/lib"
 cp "$hook" "$partial/scripts/"

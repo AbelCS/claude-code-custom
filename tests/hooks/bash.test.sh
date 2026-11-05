@@ -418,6 +418,59 @@ HOOK_PATH=$fake_tools
 rule deny 'ls' 'read'
 unset HOOK_PATH
 
+# Any stage of reading the text failing means it can't be told, whatever grep says after.
+for failing in tr sed; do
+  for with_output in '' 1; do
+    stubs=$(tmp_dir)
+    for tool in git jq awk sed tr cat grep; do
+      ln -s "$(command -v "$tool")" "$stubs/$tool"
+    done
+    failing_tool "$stubs" "$failing" "$with_output"
+    HOOK_PATH=$stubs
+    rule deny "gh pr comment 7 --body 'Generated with Claude Code'" 'attribution'
+    rule deny "gh pr comment 7 --body 'Clean'" 'attribution'
+    rule deny "gh issue create --title x --body 'Clean'" 'attribution'
+    rule deny "gh api repos/o/r/issues -f body='Clean'" 'attribution'
+    rule deny "gh pr merge 7 --squash --subject 'chore: x (#2)' --body ''" 'attribution'
+    unset HOOK_PATH
+  done
+done
+# The raw command is read separately, with its own stage.
+stubs=$(tmp_dir)
+for tool in git jq awk sed cat grep; do
+  ln -s "$(command -v "$tool")" "$stubs/$tool"
+done
+cat >"$stubs/tr" <<FAKE
+#!/bin/sh
+case \$1 in
+  -d | \"* | \'*) exit 1 ;;
+esac
+exec "$(command -v tr)" "\$@"
+FAKE
+chmod +x "$stubs/tr"
+HOOK_PATH=$stubs
+rule deny "BODY='Generated with Claude Code'; gh pr comment 7 --body \"\$BODY\"" 'attribution'
+rule deny "BODY='Generated with Claude Code'; gh api repos/o/r/issues -f body=\"\$BODY\"" 'attribution'
+unset HOOK_PATH
+
+# A heredoc the shell can't create leaves the hook's loop unrun, which isn't a clean command.
+no_temp="$(tmp_dir)/no-temp"
+mkdir "$no_temp"
+chmod 555 "$no_temp"
+real_tmpdir=${TMPDIR:-}
+TMPDIR=$no_temp
+export TMPDIR
+rule deny 'git commit --no-verify'
+TMPDIR=$real_tmpdir
+without_temp=$(hook_without_temp_files "$hook")
+if [ -n "$without_temp" ]; then
+  for command in 'git commit --no-verify' 'gh pr merge 1' 'ls'; do
+    assert_decision deny "$without_temp" "$(bash_input "$command")"
+    assert_contains "$(reason_of "$without_temp" "$(bash_input "$command")")" "can't be checked"
+  done
+fi
+chmod 755 "$no_temp"
+
 partial="$(tmp_dir)/partial"
 mkdir -p "$partial/scripts/lib"
 cp "$hook" "$partial/scripts/"

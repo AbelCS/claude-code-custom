@@ -261,9 +261,13 @@ printf '%s\n\n# --- >8 ---\nCo-Authored-By: Claude\n' "$subject" >"$message_file
 edited_rejects attribution --
 
 # Comments before the subject and among the trailers.
-printf '# A comment first\n\n%s\n\n# Co-Authored-By: Claude\n' "$subject" >"$message_file"
+printf '# A comment first\n\n%s\n\n# A comment among the trailers\n' "$subject" >"$message_file"
 assert_exit 0 edited_commit --
 assert_exit 0 test "$(git -C "$repo" log -1 --format=%B)" = "$subject"
+
+# Attribution in a comment counts, as this hook can't tell whether git will strip it.
+printf '# A comment first\n\n%s\n\n# Co-Authored-By: Claude\n' "$subject" >"$message_file"
+edited_rejects attribution --
 
 # Only comments, no subject.
 printf '# %s\n' "$subject" >"$message_file"
@@ -304,6 +308,122 @@ assert_contains "$(cat "$EDITED")" "; ------------------------ >8 --------------
 # Without scissors the hook can't tell which one, and assumes #.
 printf '%s\n' "$subject" >"$message_file"
 assert_exit 0 edited_commit -c core.commentChar=auto --
+
+# --- Comment lines in a message git would keep them in
+
+# With -m, -F and no editor, git's cleanup keeps lines that look like comments.
+git -C "$repo" symbolic-ref HEAD "refs/heads/$on_issue"
+plain_commit() { # <git options...> -- <commit options...>
+  plain_options=
+  while [ "$1" != -- ]; do
+    plain_options="$plain_options $1"
+    shift
+  done
+  shift
+  # shellcheck disable=SC2086 # Each git option is one word, split on purpose.
+  git -C "$repo" $plain_options commit -q --allow-empty "$@"
+}
+
+plain_rejects() { # <text the hook must print> <arguments of plain_commit...>
+  plain_expected=$1
+  shift
+  assert_exit 1 plain_commit "$@"
+  plain_output=$(plain_commit "$@" 2>&1)
+  assert_contains "$plain_output" "commit-msg: "
+  assert_contains "$plain_output" "$plain_expected"
+}
+
+for line in \
+  '# Generated with Claude Code' \
+  '#Generated with Claude Code' \
+  '# Co-Authored-By: Claude <noreply@anthropic.com>' \
+  '# **Co-Authored-By:** Claude' \
+  '# Assisted-by: Claude'; do
+  plain_rejects attribution -- -m "$subject" -m "$line"
+done
+printf '%s\n\n# Generated with Claude Code\n' "$subject" >"$message_file"
+plain_rejects attribution -- -F "$message_file"
+plain_rejects attribution -- --cleanup=whitespace -m "$subject" -m '# Generated with Claude Code'
+plain_rejects attribution -- --cleanup=verbatim -m "$subject" -m '# Generated with Claude Code'
+plain_rejects attribution -c core.commentChar=';' -- -m "$subject" -m '; Generated with Claude Code'
+plain_rejects attribution -c core.commentString=// -- -m "$subject" -m '// Generated with Claude Code'
+
+# Other comments pass, and git keeps them.
+assert_exit 0 plain_commit -- -m "$subject" -m '# A heading in the body'
+assert_contains "$(git -C "$repo" log -1 --format=%B)" '# A heading in the body'
+assert_exit 0 plain_commit -- -m "$subject" -m '# The hook reads the Claude Code input.'
+
+# A comment isn't the subject, however it reads.
+plain_rejects expected -- -m "# $subject" -m 'not conventional'
+plain_rejects expected -- -m "# $subject"
+printf '# %s\n\nnot conventional\n' "$subject" >"$message_file"
+plain_rejects expected -- -F "$message_file"
+
+# --- What git adds for an editor, with the message typed above it as a person would
+
+typing_editor="$scratch/typing editor"
+cat >"$typing_editor" <<'EDITOR'
+#!/bin/sh
+cp "$1" "$EDITED"
+{ cat "$TYPED_ABOVE"; cat "$1"; } >"$1.new"
+cp "$1.new" "$1"
+rm -f "$1.new"
+EDITOR
+chmod +x "$typing_editor"
+plain_editor=$GIT_EDITOR
+GIT_EDITOR="\"$typing_editor\""
+TYPED_ABOVE="$scratch/typed above"
+export TYPED_ABOVE
+
+typed_commit() { # <commit options...>
+  git -C "$repo" symbolic-ref HEAD "refs/heads/$on_issue" || return 99
+  git -C "$repo" commit -q "$@"
+}
+
+# Every part of the status block, with attribution text in the diff under the scissors.
+status_block_ready() {
+  mkdir -p "$repo/status"
+  printf 'tracked %s\n' "$change_count" >"$repo/status/tracked.txt"
+  git -C "$repo" add status/tracked.txt
+  git -C "$repo" commit -q --no-verify -m 'chore: a tracked file'
+  printf 'changed, not staged\n' >"$repo/status/tracked.txt"
+  printf 'not tracked\n' >"$repo/status/untracked.txt"
+  change_count=$((change_count + 1))
+  printf '# Generated with Claude Code\nCo-Authored-By: Claude\nchange %s\n' "$change_count" >"$repo/status/staged.txt"
+  git -C "$repo" add status/staged.txt
+}
+
+printf '%s\n\nWhy this change.\n' "$subject" >"$TYPED_ABOVE"
+for option in -v -vv ''; do
+  status_block_ready
+  # shellcheck disable=SC2086 # No option at all is one of the cases.
+  assert_exit 0 typed_commit $option
+  assert_exit 0 test "$(git -C "$repo" log -1 --format=%B)" = "$subject
+
+Why this change."
+  edited=$(cat "$EDITED")
+  assert_contains "$edited" "# Changes to be committed:"
+  assert_contains "$edited" "# Changes not staged for commit:"
+  assert_contains "$edited" "# Untracked files:"
+  [ -z "$option" ] || assert_contains "$edited" "# ------------------------ >8 ------------------------"
+  [ -z "$option" ] || assert_contains "$edited" "# Generated with Claude Code"
+done
+git -C "$repo" checkout -q -- status/tracked.txt
+rm -f "$repo/status/untracked.txt"
+
+# Above the scissors it counts, and only comments is still no subject.
+printf '%s\n\n# Generated with Claude Code\n' "$subject" >"$TYPED_ABOVE"
+status_block_ready
+assert_exit 1 typed_commit -v
+assert_contains "$(typed_commit -v 2>&1)" attribution
+printf '# %s\n' "$subject" >"$TYPED_ABOVE"
+assert_exit 1 typed_commit -v
+assert_contains "$(typed_commit -v 2>&1)" expected
+git -C "$repo" reset -q
+git -C "$repo" checkout -q -- status/tracked.txt
+rm -f "$repo/status/untracked.txt" "$repo/status/staged.txt"
+
+GIT_EDITOR=$plain_editor
 
 # --- dw-lib.sh
 

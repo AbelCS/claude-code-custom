@@ -395,6 +395,33 @@ rule none 'gh pr create --title "feat: x" --body-file clean.md'
 rule deny 'gh pr create --title "feat: x" --body-file attributed.md' 'read'
 cd "$repo" || exit 1
 
+# A cd earlier in the command moves where it's from, as for gh itself.
+printf 'Closes #1\n' >"$repo/sub/only-in-sub.md"
+printf 'Closes #1\n' >"$repo/both.md"
+printf 'Closes #1\n\nGenerated with Claude Code\n' >"$repo/sub/both.md"
+printf 'Closes #1\n\nGenerated with Claude Code\n' >"$repo/sub/attributed-in-sub.md"
+printf 'Closes #1\n\nGenerated with Claude Code\n' >"$repo/up.md"
+rule none 'cd sub && gh pr comment 7 --body-file only-in-sub.md'
+rule none 'cd sub && gh pr create --title "feat: x" -F only-in-sub.md'
+rule none 'cd sub && gh api repos/o/r/issues --input only-in-sub.md'
+rule none 'cd sub; gh pr comment 7 --body-file only-in-sub.md'
+rule none '(cd sub; gh pr comment 7 --body-file only-in-sub.md)'
+rule none 'gh pr comment 7 --body-file both.md'
+rule deny 'cd sub && gh pr comment 7 --body-file both.md' 'attribution'
+rule deny 'cd sub && gh pr comment 7 --body-file attributed-in-sub.md' 'attribution'
+rule deny 'cd sub && cd .. && gh pr comment 7 --body-file up.md' 'attribution'
+rule deny 'gh pr comment 7 --body-file only-in-sub.md' 'read'
+rule deny 'cd sub && gh pr comment 7 --body-file up.md' 'read'
+# A folder that can't be told is as good as a file that can't be read.
+for move in 'cd "$X"' 'cd -' 'cd ~someone' 'cd no-such-folder'; do
+  rule deny "$move && gh pr comment 7 --body-file clean.md" 'read'
+done
+rule deny 'cd "$X" && cd sub && gh api repos/o/r/issues --input clean.md' 'read'
+# A name in full doesn't depend on it, and a body that isn't a file never did.
+rule none "cd \"\$X\" && gh pr comment 7 --body-file \"$outside\""
+rule none "cd \"\$X\" && cd \"$repo/sub\" && gh pr comment 7 --body-file only-in-sub.md"
+rule none 'cd "$X" && gh pr comment 7 --body "Clean"'
+
 # Without a usable cwd in the input, from the project's root.
 no_cwd=$(jq -n '{tool_name: "Bash", tool_input: {command: "gh pr comment 1 --body-file attributed.md"}}')
 assert_decision deny "$hook" "$no_cwd"
