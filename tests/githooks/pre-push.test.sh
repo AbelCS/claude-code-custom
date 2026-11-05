@@ -51,10 +51,12 @@ new_fixture() {
   git -C "$repo" config core.hooksPath .githooks
   printf '.githooks\nscripts\n' >>"$repo/.git/info/exclude"
   write_env main scripts/check
-  # Logs a run with its arguments and folder, and prints a line that must reach the user.
+  # Logs a run with its arguments, its folder and the git variables that would point its
+  # git commands at this repo, and prints a line that must reach the user.
   cat >"$repo/scripts/check" <<'STUB'
 #!/bin/sh
 printf 'ran[%s] in %s\n' "$*" "$(pwd -P)" >>"$CHECK_LOG"
+printf 'git[%s|%s|%s]\n' "${GIT_DIR-unset}" "${GIT_WORK_TREE-unset}" "${GIT_INDEX_FILE-unset}" >>"$CHECK_LOG"
 echo 'output of the check'
 exit "$CHECK_EXIT"
 STUB
@@ -407,6 +409,41 @@ git -C "$repo" switch -q --detach "$(sha_of v0-annotated)"
 pushes v0-annotated
 git -C "$repo" switch -q feature
 
+# Older refs in one push, as from --tags or --follow-tags, have no checkout that matches
+# them all, so switching isn't enough: each has to go on its own.
+git -C "$repo" tag v-older-1 'HEAD~1'
+git -C "$repo" tag v-older-2 'HEAD~2'
+refuses 'on its own' v-older-1 v-older-2
+assert_contains "$refused_output" 'refs/tags/v-older-1 would get'
+assert_contains "$refused_output" 'refs/tags/v-older-2 would get'
+assert_exit 0 test "$(printf '%s\n' "$refused_output" | grep -c 'on its own')" = 2
+git -C "$repo" switch -q --detach v-older-1
+pushes v-older-1
+git -C "$repo" switch -q --detach v-older-2
+pushes v-older-2
+git -C "$repo" switch -q feature
+
+# --- Real pushes: notes hold no code, so the check has nothing to say about them
+
+git -C "$repo" notes add -m 'a note' 'HEAD~1'
+forget_runs
+pushes refs/notes/commits
+check_did_not_run
+assert_exit 0 test "$(remote_sha refs/notes/commits)" = "$(sha_of refs/notes/commits)"
+
+# Where a ref lands decides that, not where it came from: on a branch, it's code.
+refuses 'git switch --detach' refs/notes/commits:refs/heads/from-notes
+pushes 'HEAD~1:refs/notes/from-code'
+check_did_not_run
+
+# Notes don't excuse what comes with them.
+new_commit
+git -C "$repo" notes add -m 'another note' HEAD
+forget_runs
+pushes refs/notes/commits feature
+check_ran
+assert_exit 0 test "$(remote_sha refs/notes/commits)" = "$(sha_of refs/notes/commits)"
+
 # --- Real pushes: a dirty work tree warns, because the check saw what isn't pushed
 
 new_fixture
@@ -493,10 +530,22 @@ assert_exit 0 git -C "$worktree" push -q origin wt-branch
 check_ran
 assert_contains "$(cat "$CHECK_LOG")" "in $(cd "$worktree" && pwd -P)"
 assert_exit 0 test "$(remote_sha refs/heads/wt-branch)" = "$(git -C "$worktree" rev-parse HEAD)"
+# Git sets GIT_DIR for a hook here. Passed on, a check's git commands in a temp fixture
+# would act on the real repo.
+assert_contains "$(cat "$CHECK_LOG")" 'git[unset|unset|unset]'
+
+# The same goes for the others, which git passes on when the caller sets them.
+git -C "$worktree" commit -q --allow-empty -m 'chore: a commit'
+worktree_index="$(git -C "$worktree" rev-parse --absolute-git-dir)/index"
+forget_runs
+assert_exit 0 env GIT_WORK_TREE="$worktree" GIT_INDEX_FILE="$worktree_index" \
+  git -C "$worktree" push -q origin wt-branch
+assert_contains "$(cat "$CHECK_LOG")" 'git[unset|unset|unset]'
 
 # The main checkout isn't on that branch: each work tree's own HEAD is the one that counts.
 git -C "$worktree" commit -q --allow-empty -m 'chore: a commit'
-assert_exit 1 git -C "$repo" push -q origin wt-branch
+# Git won't switch to a branch that another worktree has, so the message offers that too.
+refuses 'git switch wt-branch, or push from the worktree that has it' wt-branch
 
 # --- The env file: nothing here can run without knowing the rules
 

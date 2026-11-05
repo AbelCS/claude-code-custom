@@ -80,7 +80,7 @@ Tools needed: `git`, `gh`, `jq`, `uvx` and `claude` (Claude Code 2.1.295 or late
 ## Testing
 
 - Test first: every feature, bug fix, refactor and behaviour change.
-- Tests run locally through git hooks. `pre-commit` checks the formatting of staged files and blocks a workflow that gains a per-PR trigger. `commit-msg` checks the format, requires the issue number on a `<type>/<issue>-<slug>` branch and rejects attribution. `pre-push` blocks direct pushes to `main`, except a new repo's first push, and runs `scripts/check`. That runs on the checkout, so `pre-push` fails if a pushed ref isn't what's checked out, and warns if the work tree has uncommitted changes.
+- Tests run locally through git hooks. `pre-commit` checks the formatting of staged files when formatters are configured, and blocks a workflow that gains a per-PR trigger. `commit-msg` checks the format, requires the issue number on a `<type>/<issue>-<slug>` branch and rejects attribution. `pre-push` blocks direct pushes to `main`, except a new repo's first push, and runs `scripts/check`. That runs on the checkout, so `pre-push` fails if a pushed ref isn't what's checked out, and warns if the work tree has uncommitted changes.
 - CI runs only for releases. Never add per-PR pipelines.
 - A flaky test is a bug until proven otherwise: find the root cause before rerunning or retrying. Only rerun for a proven environmental cause, such as the laptop sleeping, and say so.
 

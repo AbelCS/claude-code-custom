@@ -54,6 +54,10 @@ while IFS= read -r line; do
     *[!0]*) ;;
     *) continue ;;
   esac
+  # Notes hold no code. It's where the ref lands that says so: on a branch, it's code.
+  case $remote_ref in
+    refs/notes/*) continue ;;
+  esac
   publishes=1
 
   # The check runs on the checkout, so anything else would go out unchecked. An annotated
@@ -61,10 +65,10 @@ while IFS= read -r line; do
   commit=$(git rev-parse -q --verify "$local_sha^{commit}")
   if [ -z "$commit" ] || [ "$commit" != "$head" ]; then
     case $local_ref in
-      refs/heads/*) fix="git switch ${local_ref#refs/heads/}" ;;
-      *) fix="git switch --detach $local_sha" ;;
+      refs/heads/*) fix="git switch ${local_ref#refs/heads/}, or push from the worktree that has it," ;;
+      *) fix="git switch --detach $local_sha," ;;
     esac
-    block "$remote_ref would get $local_ref, which isn't what's checked out, so the check wouldn't run on it: run $fix, then push again"
+    block "$remote_ref would get $local_ref, which isn't what's checked out, so the check wouldn't run on it: run $fix then push that ref on its own"
   fi
 done <<REFS
 $refs
@@ -93,6 +97,9 @@ fi
 # changes, because then nothing says the tree is clean.
 uncommitted=$(git status --porcelain --untracked-files=normal) || uncommitted=unknown
 
+# Git sets these for a hook in a linked worktree, or passes on the caller's. A check that
+# runs git against a temp fixture would act on this repo instead.
+unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE
 sh -c "$DW_CHECK" </dev/null >&2
 check_status=$?
 
