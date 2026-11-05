@@ -131,6 +131,29 @@ assert_contains "$(sh "$run_sh" "$says_skip" 2>&1)" "SKIP: not on this machine"
 assert_exit 1 sh "$run_sh" "$(tmp_dir)"
 assert_exit 1 sh "$run_sh" "$(tmp_dir)/missing"
 
+# A find that fails or complains may have left tests out, so the run fails even
+# though every test it listed passes.
+partial=$(tmp_dir)
+write_test "$partial/good.test.sh" 'exit 0'
+find_fails=$(tmp_dir)
+cat >"$find_fails/find" <<'STUB'
+#!/bin/sh
+printf '%s\n' "$1/good.test.sh"
+exit 1
+STUB
+chmod +x "$find_fails/find"
+assert_exit 1 env PATH="$find_fails:$PATH" sh "$run_sh" "$partial"
+assert_contains "$(PATH="$find_fails:$PATH" sh "$run_sh" "$partial" 2>&1)" "could not list"
+find_complains=$(tmp_dir)
+cat >"$find_complains/find" <<'STUB'
+#!/bin/sh
+printf '%s\n' "$1/good.test.sh"
+echo "find: a folder: Permission denied" >&2
+STUB
+chmod +x "$find_complains/find"
+assert_exit 1 env PATH="$find_complains:$PATH" sh "$run_sh" "$partial"
+assert_contains "$(PATH="$find_complains:$PATH" sh "$run_sh" "$partial" 2>&1)" "Permission denied"
+
 # --- scripts/check and scripts/verify
 #
 # These run on a copy of the scripts in a temp repo, with stand-ins for
@@ -207,6 +230,9 @@ assert_not_contains "$(cat "$STUB_LOG")" "claude"
 fixture=$(new_fixture)
 printf 'ignored.sh\n' >"$fixture/.gitignore"
 printf 'echo no shebang\n' >"$fixture/tests/with space.sh"
+accented_shell_file=$(printf 'scripts/caf\303\251.sh')
+printf 'echo no shebang\n' >"$fixture/$accented_shell_file"
+printf 'echo no shebang\n' >"$fixture/scripts/say\"hi\".sh"
 printf '#!/bin/sh\n' >"$fixture/sh-hook"
 printf '#!/usr/bin/env bash\n' >"$fixture/bash-tool"
 printf '#!/usr/bin/env python3\n' >"$fixture/python-tool"
@@ -220,12 +246,18 @@ assert_exit 0 run_stubbed check "$fixture"
 assert_contains "$(head -n 3 "$STUB_UVX_ARGS")" "--from
 shellcheck-py
 shellcheck"
-for shell_file in scripts/check scripts/verify tests/run.sh 'tests/with space.sh' sh-hook bash-tool; do
+for shell_file in scripts/check scripts/verify tests/run.sh 'tests/with space.sh' "$accented_shell_file" 'scripts/say"hi".sh' sh-hook bash-tool; do
   assert_exit 0 grep -Fx "$shell_file" "$STUB_UVX_ARGS"
 done
 for other_file in python-tool notes.md ignored.sh gone.sh; do
   assert_exit 1 grep -Fx "$other_file" "$STUB_UVX_ARGS"
 done
+
+# Without a list of files there is nothing to lint, which is a failure.
+fixture=$(new_fixture)
+rm -rf "$fixture/.git"
+output=$(run_stubbed check "$fixture")
+assert_exit 0 test "$?" -ne 0
 
 # A missing uvx or claude fails with its name, before anything runs.
 run_with_only() { # <bin dir> <fixture>
@@ -328,29 +360,48 @@ assert_contains "$(run_leak "$no_terms" "$clean")" "$no_terms"
 assert_exit 1 run_leak "$terms" "$clean/missing"
 assert_contains "$(run_leak "$terms" "$clean/missing")" "$clean/missing"
 
-# A term in a file fails, naming the file and the term, whatever the case.
+# A term in a file fails, naming the file and the term's line, whatever the case.
 leaking=$(tmp_dir)
 mkdir -p "$leaking/deep/down"
 printf 'Built for ACME people.\n' >"$leaking/deep/down/notes.md"
 assert_exit 1 run_leak "$terms" "$leaking"
 output=$(run_leak "$terms" "$leaking")
-assert_contains "$output" "deep/down/notes.md"
-assert_contains "$output" "acme"
-assert_not_contains "$output" "global widgets"
+assert_contains "$output" "deep/down/notes.md matches term on line 1 of the term file"
+assert_not_contains "$output" "line 2"
 
 # Terms can have several words, and every leak is reported.
 printf 'Our Global Widgets line.\n' >"$leaking/other.md"
 output=$(run_leak "$terms" "$leaking")
-assert_contains "$output" "deep/down/notes.md"
-assert_contains "$output" "other.md"
-assert_contains "$output" "global widgets"
+assert_contains "$output" "deep/down/notes.md matches term on line 1 of the term file"
+assert_contains "$output" "other.md matches term on line 2 of the term file"
 
 # A term in a file or folder name is a leak as well.
 in_name=$(tmp_dir)
 mkdir -p "$in_name/acme-parts"
 printf 'Nothing here.\n' >"$in_name/acme-parts/notes.md"
 assert_exit 1 run_leak "$terms" "$in_name"
-assert_contains "$(run_leak "$terms" "$in_name")" "acme-parts"
+assert_contains "$(run_leak "$terms" "$in_name")" "matches term on line 1 of the term file"
+
+# No report shows a term, because this output reaches logs and agents. The line
+# number counts blank lines, so it is the line an editor shows.
+report_terms="$(tmp_dir)/terms"
+printf 'first\n\n  acme  \n' >"$report_terms"
+report_leak=$(tmp_dir)
+printf 'Built for ACME and acme people.\n' >"$report_leak/notes.md"
+output=$(run_leak "$report_terms" "$report_leak")
+assert_contains "$output" "notes.md matches term on line 3 of the term file"
+assert_not_contains "$output" "acme"
+assert_not_contains "$output" "ACME"
+
+# A path holding a term would show it, so the report gives the path's place in
+# the list instead, whether the hit is on the name or on the contents.
+report_name=$(tmp_dir)
+mkdir "$report_name/acme-parts"
+printf 'first\n' >"$report_name/acme-parts/notes.md"
+output=$(run_leak "$report_terms" "$report_name")
+assert_contains "$output" "path 1 of the list from 'find . -type f' matches term on line 3 of the term file"
+assert_contains "$output" "path 1 of the list from 'find . -type f' matches term on line 1 of the term file"
+assert_not_contains "$output" "acme"
 
 # Only the search root's insides count, not the path leading to it.
 named_parent="$(tmp_dir)/acme"
@@ -420,6 +471,18 @@ if "$can_lock_files"; then
   chmod 644 "$locked_terms"
   assert_exit 0 test "$code" -eq 1
   assert_contains "$output" "$locked_terms"
+
+  # An error message holding a term is withheld, but still fails and is counted.
+  report_error=$(tmp_dir)
+  printf 'Nothing here.\n' >"$report_error/notes.md"
+  mkdir "$report_error/acme-locked"
+  chmod 000 "$report_error/acme-locked"
+  output=$(run_leak "$report_terms" "$report_error")
+  code=$?
+  chmod 755 "$report_error/acme-locked"
+  assert_exit 0 test "$code" -eq 1
+  assert_contains "$output" "1 error message(s) withheld"
+  assert_not_contains "$output" "acme"
 fi
 
 # A term file with Windows line endings still matches.
@@ -428,7 +491,7 @@ printf 'first\r\nacme\r\n' >"$crlf_terms"
 crlf_leak=$(tmp_dir)
 printf 'Built for acme people.\n' >"$crlf_leak/notes.md"
 assert_exit 1 run_leak "$crlf_terms" "$crlf_leak"
-assert_contains "$(run_leak "$crlf_terms" "$crlf_leak")" "notes.md contains \"acme\""
+assert_contains "$(run_leak "$crlf_terms" "$crlf_leak")" "notes.md matches term on line 2 of the term file"
 assert_exit 0 run_leak "$crlf_terms" "$clean"
 
 # By default it reads .leak-terms.local and searches every tracked file in the
@@ -463,7 +526,7 @@ rm "$default_repo/acme-untracked.md"
 # A staged file counts as tracked.
 git -C "$default_repo" add untracked.md
 assert_exit 1 sh "$default_leak"
-assert_contains "$(sh "$default_leak" 2>&1)" "untracked.md contains \"acme\""
+assert_contains "$(sh "$default_leak" 2>&1)" "untracked.md matches term on line 1 of the term file"
 git -C "$default_repo" rm -q -f --cached untracked.md
 rm "$default_repo/untracked.md"
 
@@ -471,7 +534,7 @@ rm "$default_repo/untracked.md"
 printf 'Built for ACME people.\n' >"$default_repo/docs/notes.md"
 git -C "$default_repo" commit -q -a -m "add a leak outside the plugins"
 assert_exit 1 sh "$default_leak"
-assert_contains "$(sh "$default_leak" 2>&1)" "docs/notes.md contains \"acme\""
+assert_contains "$(sh "$default_leak" 2>&1)" "docs/notes.md matches term on line 1 of the term file"
 printf 'Nothing here.\n' >"$default_repo/docs/notes.md"
 git -C "$default_repo" commit -q -a -m "remove it"
 assert_exit 0 sh "$default_leak"
@@ -481,7 +544,10 @@ mkdir -p "$default_repo/docs/acme-parts"
 printf 'Nothing here.\n' >"$default_repo/docs/acme-parts/notes.md"
 git -C "$default_repo" add docs/acme-parts/notes.md
 assert_exit 1 sh "$default_leak"
-assert_contains "$(sh "$default_leak" 2>&1)" "docs/acme-parts/notes.md"
+output=$(sh "$default_leak" 2>&1)
+assert_not_contains "$output" "acme"
+place=$(git -C "$default_repo" ls-files | grep -n acme-parts | cut -d: -f1)
+assert_contains "$output" "path $place of the list from 'git ls-files' matches term on line 1 of the term file"
 git -C "$default_repo" rm -q -f docs/acme-parts/notes.md
 assert_exit 0 sh "$default_leak"
 
@@ -491,43 +557,78 @@ for unusual_name in 'docs/with space.md' "$accented_name"; do
   printf 'acme\n' >"$default_repo/$unusual_name"
   git -C "$default_repo" add "$unusual_name"
   assert_exit 1 sh "$default_leak"
-  assert_contains "$(sh "$default_leak" 2>&1)" "$unusual_name contains \"acme\""
+  assert_contains "$(sh "$default_leak" 2>&1)" "$unusual_name matches term on line 1 of the term file"
   git -C "$default_repo" rm -q -f "$unusual_name"
 done
 assert_exit 0 sh "$default_leak"
 
-# A tracked file it can't find can't be vouched for.
-printf 'Nothing here.\n' >"$default_repo/docs/gone.md"
+# It searches what would be committed: the index, not the working files.
+printf 'acme\n' >"$default_repo/docs/staged.md"
+git -C "$default_repo" add docs/staged.md
+printf 'Nothing here.\n' >"$default_repo/docs/staged.md"
+assert_exit 1 sh "$default_leak"
+assert_contains "$(sh "$default_leak" 2>&1)" "docs/staged.md matches term on line 1 of the term file"
+git -C "$default_repo" add docs/staged.md
+assert_exit 0 sh "$default_leak"
+printf 'acme\n' >"$default_repo/docs/staged.md"
+assert_exit 0 sh "$default_leak"
+git -C "$default_repo" rm -q -f docs/staged.md
+
+# So a tracked file deleted from disk is still searched, in the index.
+printf 'acme\n' >"$default_repo/docs/gone.md"
 git -C "$default_repo" add docs/gone.md
 rm "$default_repo/docs/gone.md"
 assert_exit 1 sh "$default_leak"
-assert_contains "$(sh "$default_leak" 2>&1)" "docs/gone.md"
 git -C "$default_repo" rm -q --cached docs/gone.md
+printf 'Nothing here.\n' >"$default_repo/docs/gone.md"
+git -C "$default_repo" add docs/gone.md
+rm "$default_repo/docs/gone.md"
 assert_exit 0 sh "$default_leak"
+git -C "$default_repo" rm -q --cached docs/gone.md
 
-# Tracked files it can't read fail the same way.
+# And locked working files make no difference.
 if "$can_lock_files"; then
   mkdir "$default_repo/locked"
-  printf 'Nothing here.\n' >"$default_repo/locked/notes.md"
-  printf 'Nothing here.\n' >"$default_repo/locked-file.md"
-  git -C "$default_repo" add locked/notes.md locked-file.md
-
+  printf 'acme\n' >"$default_repo/locked/notes.md"
+  git -C "$default_repo" add locked/notes.md
   chmod 000 "$default_repo/locked"
   output=$(sh "$default_leak" 2>&1)
   code=$?
   chmod 755 "$default_repo/locked"
   assert_exit 0 test "$code" -eq 1
-  assert_contains "$output" "locked/notes.md"
-
-  chmod 000 "$default_repo/locked-file.md"
-  output=$(sh "$default_leak" 2>&1)
-  code=$?
-  chmod 644 "$default_repo/locked-file.md"
-  assert_exit 0 test "$code" -eq 1
-  assert_contains "$output" "locked-file.md"
-
-  git -C "$default_repo" rm -q -f locked/notes.md locked-file.md
+  assert_contains "$output" "locked/notes.md matches term on line 1 of the term file"
+  git -C "$default_repo" rm -q -f locked/notes.md
 fi
+
+# Index content it can't read fails, for a file and for a link.
+remove_staged_object() { # <path in the index>
+  oid=$(git -C "$default_repo" rev-parse ":$1")
+  rm -f "$default_repo/.git/objects/$(printf '%s' "$oid" | cut -c1-2)/$(printf '%s' "$oid" | cut -c3-)"
+}
+printf 'An object about to go missing.\n' >"$default_repo/docs/no-object.md"
+git -C "$default_repo" add docs/no-object.md
+remove_staged_object docs/no-object.md
+assert_exit 1 sh "$default_leak"
+assert_contains "$(sh "$default_leak" 2>&1)" "docs/no-object.md"
+git -C "$default_repo" update-index --force-remove docs/no-object.md
+rm "$default_repo/docs/no-object.md"
+assert_exit 0 sh "$default_leak"
+ln -s no-object-target "$default_repo/no-object-link"
+git -C "$default_repo" add no-object-link
+remove_staged_object no-object-link
+assert_exit 1 sh "$default_leak"
+assert_contains "$(sh "$default_leak" 2>&1)" "no-object-link"
+git -C "$default_repo" update-index --force-remove no-object-link
+rm "$default_repo/no-object-link"
+assert_exit 0 sh "$default_leak"
+
+# Unmerged files have no single staged content to search.
+conflict_oid=$(printf 'acme\n' | git -C "$default_repo" hash-object -w --stdin)
+printf '100644 %s 2\tdocs/conflict.md\n' "$conflict_oid" | git -C "$default_repo" update-index --index-info
+assert_exit 1 sh "$default_leak"
+assert_contains "$(sh "$default_leak" 2>&1)" "unmerged"
+git -C "$default_repo" update-index --force-remove docs/conflict.md
+assert_exit 0 sh "$default_leak"
 
 # Git commits a tracked symlink's target text as its content, so that text is
 # searched, whether or not it points at anything. The link's name counts too.
@@ -539,10 +640,26 @@ ln -s /Users/ACME/secret "$default_repo/secret-link"
 git -C "$default_repo" add secret-link
 assert_exit 1 sh "$default_leak"
 output=$(sh "$default_leak" 2>&1)
-assert_contains "$output" "secret-link"
-assert_contains "$output" "contains \"acme\""
+assert_contains "$output" "secret-link matches term on line 1 of the term file"
+assert_not_contains "$output" "ACME"
+assert_not_contains "$output" "secret-link ->"
 git -C "$default_repo" rm -q -f secret-link
 assert_exit 0 sh "$default_leak"
+
+# A link's target comes from the index too, not from the link on disk.
+ln -s /Users/ACME/secret "$default_repo/staged-link"
+git -C "$default_repo" add staged-link
+rm "$default_repo/staged-link"
+ln -s docs "$default_repo/staged-link"
+assert_exit 1 sh "$default_leak"
+git -C "$default_repo" add staged-link
+assert_exit 0 sh "$default_leak"
+rm "$default_repo/staged-link"
+ln -s /Users/ACME/secret "$default_repo/staged-link"
+assert_exit 0 sh "$default_leak"
+git -C "$default_repo" rm -q -f staged-link
+assert_exit 0 sh "$default_leak"
+
 ln -s docs "$default_repo/acme-link"
 git -C "$default_repo" add acme-link
 assert_exit 1 sh "$default_leak"
