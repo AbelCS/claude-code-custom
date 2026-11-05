@@ -19,9 +19,9 @@ tool_input() {
 
 # Runs <script> with <json> on stdin and sets _hook_output. A hook decides by what it
 # prints, so any other exit status is a failure of the hook.
+_hook_shell=$(command -v sh)
 _hook_run() {
-  _hook_shell=$(command -v sh) || return 1
-  if ! _hook_output=$(printf '%s' "$2" | env PATH="${HOOK_PATH:-$PATH}" "$_hook_shell" "$1"); then
+  if ! _hook_output=$(printf '%s' "$2" | PATH="${HOOK_PATH:-$PATH}" "$_hook_shell" "$1"); then
     printf 'hook: %s failed, having printed: %s\n' "$1" "$_hook_output" >&2
     return 1
   fi

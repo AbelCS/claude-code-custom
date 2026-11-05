@@ -41,18 +41,25 @@ newline='
 
 # --- Reading commands
 
-# normal_commands <text>: prints each simple command in the text as its words, each ended
-# by word_end. See command-words.awk. Fails if either step does.
+# normal_commands <text> [part line]: prints each simple command in the text as its words,
+# each ended by word_end. A part line separates texts: see split-command.awk. See
+# command-words.awk. Fails if either step does.
 normal_commands() {
-  nc_split=$(printf '%s\n' "$1" | awk -v 'WORD_END=\036' -f "$scripts_dir/lib/split-command.awk" 2>/dev/null) || return 1
+  nc_split=$(printf '%s\n' "$1" | awk -v 'WORD_END=\036' -v "PART=${2-}" -f "$scripts_dir/lib/split-command.awk" 2>/dev/null) || return 1
   printf '%s\n' "$nc_split" | DW_ROOT=$DW_PROJECT_DIR awk -f "$scripts_dir/lib/command-words.awk" 2>/dev/null
 }
 
-# project_commands <jq filter>: normal_commands of what the filter finds in the project
-# file, with a list that isn't a list being an error.
-project_commands() {
-  pc_text=$(dw_project "def list(\$name): (.[\$name] // []) | if type == \"array\" then .[] else error(\"not a list\") end; $1 | strings" 2>/dev/null) || return 1
-  [ -z "$pc_text" ] || normal_commands "$pc_text"
+# read_project_lists: sets test_commands and reset_commands to normal commands from the
+# project file, with a list that isn't a list being an error. It's one pass over both, as
+# this runs before every command.
+read_project_lists() {
+  rl_part=$(printf '\035')
+  # shellcheck disable=SC2016 # The dollars are jq's.
+  rl_text=$(dw_project 'def list($name): (.[$name] // []) | if type == "array" then .[] else error("not a list") end;
+    (.commands.check, .commands.verify, list("testCommands") | strings), "\u001d", (list("databaseResetCommands") | strings)' 2>/dev/null) || return 1
+  rl_commands=$(normal_commands "$rl_text" "$rl_part") || return 1
+  test_commands=${rl_commands%%"$rl_part$word_end"*}
+  reset_commands=${rl_commands#*"$rl_part$word_end"}
 }
 
 # Sets listed_form to a normal command without git's -C, which normal commands keep for
@@ -151,8 +158,7 @@ command_text=$(dw_input '.tool_input.command // empty' 2>/dev/null) ||
 [ -n "$command_text" ] || exit 0
 
 broken_project="dev-workflow: couldn't read the lists in $DW_PROJECT_FILE: commands has to be an object, and testCommands and databaseResetCommands lists. Fix it, or run the setup skill to create it again."
-test_commands=$(project_commands '.commands.check, .commands.verify, list("testCommands")') || dw_deny "$broken_project"
-reset_commands=$(project_commands 'list("databaseResetCommands")') || dw_deny "$broken_project"
+read_project_lists || dw_deny "$broken_project"
 reset_commands="dropdb$word_end$newline$reset_commands"
 
 commands=$(normal_commands "$command_text") || dw_deny "dev-workflow: couldn't read this command to check it."

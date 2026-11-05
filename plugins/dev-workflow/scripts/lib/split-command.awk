@@ -7,6 +7,10 @@
 # quotes or a substitution, comes out as the byte 037 to keep it on one line. Readers
 # who need the text as written turn it back with tr '\037' '\n'.
 #
+# With -v PART=<text>, a line of just that text ends one text and starts another, and comes
+# out as itself. So one run can read several, and a quote left open in one can't take in
+# the next.
+#
 # With -v WORD_END=<byte>, each word on a line ends with that byte in place of the spaces
 # around it, still with its quotes, so that what reads the words needn't find their edges
 # again, which takes all of the grammar here. A redirection is then a word of its own
@@ -28,15 +32,30 @@
 # POSIX awk only. The input is one string, S, walked by position; functions take a
 # position and return the one after what they read.
 
+BEGIN {
+  RESERVED_BEFORE_PAREN = "^(if|then|elif|else|while|until|do|time|for|select|!|[{])$"
+}
+
+PART != "" && $0 == PART {
+  read_text()
+  print PART
+  next
+}
+
 {
   S = S separator $0
   separator = "\n"
 }
 
 END {
-  RESERVED_BEFORE_PAREN = "^(if|then|elif|else|while|until|do|time|for|select|!|[{])$"
+  read_text()
+}
+
+function read_text() {
   L = length(S)
   commands(1, "")
+  S = ""
+  separator = ""
 }
 
 # The list of commands from i up to the closer, or the end of the text. A word being

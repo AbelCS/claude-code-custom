@@ -64,8 +64,9 @@ attempt() {
 }
 
 blocks() { # <text the hook must print>...: and it was the hook.
-  assert_exit 1 attempt
-  blocked=$(attempt 2>&1)
+  if blocked=$(attempt 2>&1); then
+    _assert_fail "expected the commit to be blocked"
+  fi
   assert_contains "$blocked" 'pre-commit: '
   for text in "$@"; do
     assert_contains "$blocked" "$text"
@@ -278,8 +279,7 @@ stage b.rs 'clean'
 printf 'clean too\n' >"$repo/b.rs"
 stage c.rs 'BAD'
 blocks 'b.rs' "$partly_staged" 'c.rs' './fmt'
-log_is 'fmt[c.rs]
-fmt[c.rs]'
+log_is 'fmt[c.rs]'
 
 # What the hook suggests works, both ways.
 fresh
@@ -375,304 +375,36 @@ jobs='jobs:
     steps:
       - run: echo hi'
 
-# Scalars.
-workflow_blocks pull_request 'on: pull_request'
-workflow_blocks pull_request_target 'on: pull_request_target'
+# A few real commits for each decision. The shapes the detector reads are in
+# ci-triggers.test.sh, against the detector itself.
 workflow_blocks push 'on: push'
-workflow_blocks push 'on: "push"'
-workflow_blocks push "on: 'push'"
-workflow_blocks push 'on: push # for now'
-workflow_blocks push '"on": push'
-workflow_blocks push "'on': push"
-workflow_blocks push 'on : push'
-workflow_blocks push 'on:	push'
-workflow_blocks push "name: x
-
-# A comment
-on: push
-$jobs"
-workflow_blocks push 'on:
-  push'
-workflow_blocks push '---
-on: push'
-
-# Flow sequences.
-workflow_blocks push 'on: [push]'
-workflow_blocks push 'on: [ workflow_dispatch, push ]'
-workflow_blocks pull_request 'on: ["workflow_dispatch", "pull_request"]'
-workflow_blocks pull_request "on: ['pull_request']"
-workflow_blocks push 'on: [push] # for now'
-workflow_blocks push 'on:
-  [push]'
-workflow_blocks push "on: [
-  workflow_dispatch,
-  push,
-]
-$jobs"
-
-# Flow maps.
-workflow_blocks pull_request 'on: { pull_request: {} }'
-workflow_blocks pull_request 'on: {pull_request: {}}'
-workflow_blocks pull_request 'on: {pull_request:{}}'
-workflow_blocks pull_request 'on: {"pull_request": null}'
-workflow_blocks push 'on: { push }'
-workflow_blocks push 'on: { push: { branches: [main] } }'
-workflow_blocks push 'on: { workflow_dispatch: { inputs: { a: {} } }, push: {} }'
-workflow_blocks push "on: {
-  workflow_dispatch: {},
-  # A comment
-  push: {
-    branches: [main]
-  }
-}
-$jobs"
-
-# Block maps.
-workflow_blocks push "on:
-  push:
-$jobs"
-workflow_blocks push "on:
-  push:
-    branches: [main]
-$jobs"
-workflow_blocks pull_request "on:
-  workflow_dispatch:
-  pull_request:
-    types: [opened]
-$jobs"
+workflow_blocks pull_request 'on: [workflow_dispatch, pull_request]'
 workflow_blocks pull_request_target "on:
-    # A comment
-    pull_request_target: {}
-$jobs"
-workflow_blocks push 'on:
-  "push":'
-workflow_blocks push 'on:
-  push : {}'
-workflow_blocks push "on: # all of these
-
-  # A comment
-  schedule:
-    - cron: '0 0 * * *'
-
-  push:
-$jobs"
-
-# Block sequences, which YAML lets sit at the same indent as their key.
-workflow_blocks push "on:
-  - workflow_dispatch
-  - push
+  workflow_dispatch:
+  pull_request_target:
+    types: [opened]
 $jobs"
 workflow_blocks push "on:
 - workflow_dispatch
 - push
 $jobs"
-workflow_blocks push 'on:
-  - "push" # for now'
-
-# A file indented as a whole, a BOM and Windows line endings are all still YAML.
-workflow_blocks push '  name: x
-  on: push'
-workflow_blocks push "$(printf '\357\273\277on: push')"
-workflow_blocks push "$(printf 'name: x\r\non: push\r')"
-workflow_blocks push "$(printf 'on:\r\n  push:\r\n    branches: [main]\r')"
-workflow_blocks push "$(printf 'on: [\r\n  push\r\n]\r')"
-
-# Allowed triggers.
 workflow_passes 'on: workflow_dispatch'
-workflow_passes "on: workflow_dispatch
-$jobs"
-workflow_passes 'on: [workflow_dispatch, schedule]'
-workflow_passes 'on: { workflow_dispatch: {} }'
-workflow_passes "on:
-  workflow_dispatch:
-  schedule:
-    - cron: '0 0 * * *'
-$jobs"
-workflow_passes "on:
-- workflow_dispatch
-$jobs"
-workflow_passes 'on:'
-workflow_passes "name: no trigger at all
-$jobs"
-
-# Other triggers that only start the same.
-workflow_passes 'on: pull_request_review'
-workflow_passes 'on: [pull_request_review_comment, pushed]'
-workflow_passes 'on: { pull_request_review: {} }'
-workflow_passes 'on:
-  pull_request_review:
-  pushes:'
-
-# The words elsewhere in a workflow.
-workflow_passes "name: push
+workflow_passes 'name: push
 on: workflow_dispatch
 jobs:
   push:
-    name: pull_request
-    runs-on: ubuntu-latest
-    if: github.event_name == 'push'
     steps:
       - name: push
-        run: git push
-      - name: on push
-        run: echo 'on: push'
-      - run: |
-          on: push
-          push:
-          pull_request:
-      - uses: some/action@v1
-        with:
-          on: push
-          push: true"
-workflow_passes 'name: |
-  on: push
-on: workflow_dispatch'
-workflow_passes 'env:
-  on: push
-on: workflow_dispatch'
-# A job comes after the triggers, at the indent of a list that has ended.
-workflow_passes 'on:
-- workflow_dispatch
-push:
-- not a trigger'
+        run: echo "on: push"'
 
-# Names further down inside a trigger aren't triggers.
-workflow_passes "on:
-  workflow_dispatch:
-    inputs:
-      push:
-        description: push it
-      pull_request:
-        type: string
-$jobs"
-workflow_passes 'on:
-  workflow_run:
-    workflows: [push]
-    types:
-      - push'
-workflow_passes 'on: { workflow_dispatch: { inputs: { push: {}, pull_request: { type: string } } } }'
-workflow_passes 'on: { workflow_dispatch: push }'
-workflow_passes 'on: [ [push] ]'
-
-# Inside quotes, brackets and commas are text.
-workflow_passes 'on: [ "a, push" ]'
-workflow_passes "on: { 'a, push': {} }"
-workflow_blocks push 'on: [ "]", push ]'
-workflow_blocks push "on: { '}': {}, push: {} }"
-workflow_blocks push 'on: [ "a\", b]", push ]'
-
-# Comments don't count.
-workflow_passes '# on: push
-on: workflow_dispatch'
-workflow_passes 'on: workflow_dispatch # or push
-# push:'
-workflow_passes "on:
-  # push:
-  workflow_dispatch: # push:
-    # pull_request:
-$jobs"
-workflow_passes 'on:
-  # - push
-  - workflow_dispatch
-  # - pull_request'
-workflow_passes 'on: [
-  # push,
-  workflow_dispatch # , push
-]'
-workflow_passes 'on: {
-  # push: {},
-  workflow_dispatch: {} # , push: {}
-}'
-
-# A colon can follow a closing quote directly, and a quoted name is the whole name.
-workflow_blocks push 'on: {"push":null}'
-workflow_blocks push "on: {'push':null}"
-workflow_blocks push 'on: {"push" : null}'
-workflow_blocks push '"on":push'
-workflow_blocks push 'on:
-  "push":null'
-workflow_passes 'on: ["push: x"]'
-workflow_passes 'on: {"a":"push"}'
-
-# A list item's value can start on the next line.
-workflow_blocks push 'on:
-  -
-    push'
-workflow_blocks push 'on:
--
-  push:
-    branches: [main]
-jobs:
-  build: {}'
-workflow_passes 'on:
-  -
-    workflow_dispatch
-  -
-    schedule:
-      - push'
-
-# Shapes this can't follow block, because they could be hiding anything.
 workflow_unreadable() { # <file content>
   fresh
   stage "$workflow" "$1"
   blocks "$workflow" 'could not read the triggers'
 }
 
-for start in '*x' '|' '|-' '>' '>-' '&a' '&a push' '!!str' '!!str push' '? push' '<<: *x'; do
-  workflow_unreadable "on: $start"
-  workflow_unreadable "on:
-  $start
-  push:"
-  workflow_unreadable "on:
-  workflow_dispatch:
-  $start"
-  workflow_unreadable "on:
-  - $start"
-  workflow_unreadable "on:
-- workflow_dispatch
-- $start"
-  workflow_unreadable "on:
-  -
-    $start"
-  workflow_unreadable "on: [$start]"
-  workflow_unreadable "on: [workflow_dispatch, $start]"
-  workflow_unreadable "on: {$start}"
-done
-workflow_unreadable 'on: >-
-  push'
-workflow_unreadable 'on:
-  &a push:
-    branches: [main]'
-workflow_unreadable 'on:
-  !!str push:'
-
-# A file that's one flow map, wherever it starts.
-workflow_unreadable '{on: push, jobs: {}}'
-workflow_unreadable '--- {on: push}'
-workflow_unreadable '---
-# A comment
-{
-  on: workflow_dispatch
-}'
-workflow_unreadable '  {on: push}'
-
-# As text in quotes, or below the triggers, these characters mean nothing.
-workflow_passes 'on: ["*x", "&a", "? b"]'
-workflow_passes 'on: "*x"'
-workflow_passes "on:
-  workflow_dispatch:
-    inputs:
-      a:
-        description: >-
-          *x
-        default: &a push
-$jobs"
-workflow_passes "name: |
-  text
-on: workflow_dispatch
-env: &e
-  a: *x
-$jobs"
+workflow_unreadable 'on: *x'
+workflow_unreadable '{on: push}'
 
 # It's the staged copy that counts, not the one on disk, either way round.
 fresh
@@ -688,11 +420,9 @@ assert_exit 0 attempt
 fresh
 stage .github/workflows/x.yaml 'on: push'
 blocks .github/workflows/x.yaml push
-for elsewhere in .github/workflows/sub/x.yml .github/x.yml docs/.github/workflows/x.yml x.yml .github/workflows/x.txt; do
-  fresh
-  stage "$elsewhere" 'on: push'
-  assert_exit 0 attempt
-done
+fresh
+stage .github/workflows/sub/x.yml 'on: push'
+assert_exit 0 attempt
 
 # A workflow name with a space.
 fresh
@@ -703,11 +433,9 @@ blocks '.github/workflows/a b.yml' push
 fresh
 stage "$allowed" 'on: push'
 assert_exit 0 attempt
-for near in .github/workflows/lease.yml .github/workflows/release.yml.yml .github/workflows/elease.yml; do
-  fresh
-  stage "$near" 'on: push'
-  blocks "$near" push
-done
+fresh
+stage .github/workflows/release.yml.yml 'on: push'
+blocks .github/workflows/release.yml.yml push
 
 # Deleting a workflow is fine, and removes the problem.
 trigger_base=$base

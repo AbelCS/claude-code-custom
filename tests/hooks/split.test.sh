@@ -319,3 +319,32 @@ expect_words 'a "$(b >c)"d' 'b|>c|' 'a|"$(b >c)"d|'
 expect_words 'a --f=<(b)' 'b|' 'a|--f=<(b)|'
 # Without WORD_END the text is left as it was.
 expect 'a>out b' 'a>out b'
+
+# --- Several texts in one run
+
+part=$(printf '\035')
+expect_parts() { # <input> <expected output>, with the part line shown as PART
+  _parts=$(printf '%s\n' "$1" | awk -v 'PART=\035' -f "$splitter") || _assert_fail "the splitter failed on: $1"
+  _parts=$(printf '%s\n' "$_parts" | sed "s/^$part\$/PART/")
+  [ "$_parts" = "$2" ] || _assert_fail "for input:
+$1
+expected:
+$2
+got:
+$_parts"
+}
+
+expect_parts "a${nl}${part}${nl}b" "a${nl}PART${nl}b"
+expect_parts "a && b${nl}c${nl}${part}${nl}d" "a${nl}b${nl}c${nl}PART${nl}d"
+expect_parts "${part}${nl}a" "PART${nl}a"
+expect_parts "a${nl}${part}" "a${nl}PART"
+expect_parts "${part}" "PART"
+# What's left open in one text can't take in the next.
+expect_parts "a \"b${nl}${part}${nl}c" "a \"b${nl}PART${nl}c"
+expect_parts "a 'b${nl}${part}${nl}c" "a 'b${nl}PART${nl}c"
+expect_parts "a \$(b${nl}${part}${nl}c" "b${nl}a \$(b${nl}PART${nl}c"
+expect_parts "a <<EOF${nl}x${nl}${part}${nl}c" "a <<EOF${nl}PART${nl}c"
+# Only with PART set, and only as a whole line.
+expect "a${nl}${part}${nl}b" 'a' "$part" 'b'
+expect_parts "a ${part}${nl}b" "a ${part}${nl}b"
+
