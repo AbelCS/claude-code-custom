@@ -23,10 +23,7 @@ export LC_ALL
 set -f
 unset GIT_DIR GIT_WORK_TREE
 
-dw_lib=$scripts_dir/../skills/setup/templates/githooks/dw-lib.sh
-[ -r "$dw_lib" ] || dw_deny "dev-workflow: $dw_lib is missing, so this command can't be checked. Reinstall the plugin."
-# shellcheck source=plugins/dev-workflow/skills/setup/templates/githooks/dw-lib.sh
-. "$dw_lib"
+dw_source_git_lib "$scripts_dir"
 
 word_end=$(printf '\036')
 line_in_word=$(printf '\037')
@@ -35,6 +32,8 @@ newline='
 
 # shellcheck source=plugins/dev-workflow/scripts/lib/walk-flags.sh
 . "$scripts_dir/lib/walk-flags.sh"
+# shellcheck source=plugins/dev-workflow/scripts/lib/attribution.sh
+. "$scripts_dir/lib/attribution.sh"
 # shellcheck source=plugins/dev-workflow/scripts/lib/bash-rules-git.sh
 . "$scripts_dir/lib/bash-rules-git.sh"
 # shellcheck source=plugins/dev-workflow/scripts/lib/bash-rules-gh.sh
@@ -96,16 +95,6 @@ matches_any() {
     esac
   done
   return 1
-}
-
-# Sets session_folder to where the session's shell is, from the input, or else the
-# project's folder. Commands run from there, and with worktrees it can be another branch.
-find_session_folder() {
-  session_folder=$(dw_input '.cwd | strings' 2>/dev/null)
-  case $session_folder in
-    /*) [ -d "$session_folder" ] || session_folder=$DW_PROJECT_DIR ;;
-    *) session_folder=$DW_PROJECT_DIR ;;
-  esac
 }
 
 # --- Database resets

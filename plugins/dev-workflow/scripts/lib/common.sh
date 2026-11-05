@@ -136,3 +136,22 @@ dw_project() {
 dw_input() {
   printf '%s' "$DW_INPUT" | jq -r "$1"
 }
+
+# dw_session_folder: sets DW_SESSION_FOLDER to where the session's shell is, from the
+# input, or else the project's folder. With worktrees it can be another branch.
+dw_session_folder() {
+  DW_SESSION_FOLDER=$(dw_input '.cwd | strings' 2>/dev/null)
+  case $DW_SESSION_FOLDER in
+    /*) [ -d "$DW_SESSION_FOLDER" ] || DW_SESSION_FOLDER=$DW_PROJECT_DIR ;;
+    *) DW_SESSION_FOLDER=$DW_PROJECT_DIR ;;
+  esac
+}
+
+# dw_source_git_lib <this plugin's scripts folder>: sources the git hooks' library, which
+# holds the rules both layers apply. Denies if it's missing.
+dw_source_git_lib() {
+  _dw_lib=$1/../skills/setup/templates/githooks/dw-lib.sh
+  [ -r "$_dw_lib" ] || dw_deny "dev-workflow: $_dw_lib is missing, so this can't be checked. Reinstall the plugin."
+  # shellcheck source=plugins/dev-workflow/skills/setup/templates/githooks/dw-lib.sh
+  . "$_dw_lib"
+}

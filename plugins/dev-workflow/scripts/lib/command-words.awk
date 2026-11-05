@@ -13,7 +13,7 @@
 # - sh or bash running a script comes down to the script. With -c or -s it stays, as what
 #   runs can't be read from here.
 # - git and gh lose a path to them and their own options before the subcommand, except
-#   git's -C, which says where it acts.
+#   git's -C, which says where it acts, and all of gh api's, which come after api.
 # - Any other command loses a leading ./ or path to the project's root, as in
 #   ./scripts/check, so that it compares with how the project file names it.
 #
@@ -139,9 +139,10 @@ function print_command(name, p,    i, line) {
 }
 
 # gh takes its flags anywhere, so they're dropped up to the end of the subcommand's name.
+# gh api has only the one word, and all that follows is what a rule needs to read.
 function print_gh(p,    found, name_words) {
   name_words = "gh"
-  while (p <= n && found < 2) {
+  while (p <= n && found < 2 && name_words != "gh" END_OF_WORD "api") {
     if (words[p] ~ GH_VALUE) {
       p += 2
     } else if (words[p] ~ /^-/) {

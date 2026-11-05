@@ -810,6 +810,112 @@ rule none 'git log --grep="Generated with Claude Code"'
 rule none 'gh pr view 1
 grep "Generated with Claude Code" notes.md'
 
+# --- Closing and reviewing, whose text GitHub shows like any comment
+
+for command in \
+  'gh pr review 1 --body' \
+  'gh pr review 1 -b' \
+  'gh pr review 1 --comment --body' \
+  'gh pr review 1 -c -b' \
+  'gh pr review 1 --approve --body' \
+  'gh pr review 1 --request-changes -b' \
+  'gh pr close 1 --comment' \
+  'gh pr close 1 -c' \
+  'gh pr close -d 1 -c' \
+  'gh issue close 1 --comment' \
+  'gh issue close 1 -c' \
+  'gh issue close 1 --reason completed -c'; do
+  rule deny "$command \"Co-Authored-By: Claude\"" 'attribution'
+  rule none "$command \"Clean text about Claude.\""
+done
+rule deny 'gh pr review 1 --body="Co-Authored-By: Claude"' 'attribution'
+rule deny 'gh pr review 1 -b"Co-Authored-By: Claude"' 'attribution'
+rule deny 'gh pr close 1 --comment="Co-Authored-By: Claude"' 'attribution'
+rule deny 'gh pr close 1 -c"Co-Authored-By: Claude"' 'attribution'
+rule deny 'gh issue close 1 --comment "Why.\n\nGenerated with Claude Code"' 'attribution'
+rule none 'gh pr review 1 --approve'
+rule none 'gh pr review 1 --comment --body "--body"'
+rule none 'gh pr close 1'
+rule none 'gh pr close 1 --delete-branch'
+rule none 'gh issue close 1 --reason "not planned"'
+rule none 'gh pr close --help'
+rule none 'gh issue close --help'
+rule none 'gh pr review --help'
+
+# --- gh api, when it writes
+
+for flag in '-f' '--raw-field' '-F' '--field'; do
+  rule deny "gh api repos/o/r/issues/1/comments $flag body='Co-Authored-By: Claude'" 'attribution'
+  rule deny "gh api repos/o/r/issues/1/comments $flag \"body=Why.\n\nGenerated with Claude Code\"" 'attribution'
+  rule deny "gh api -X PATCH repos/o/r/pulls/1 $flag 'body=Assisted-by: Claude'" 'attribution'
+  rule none "gh api repos/o/r/issues/1/comments $flag 'body=Clean text about Claude.'"
+done
+rule deny 'gh api repos/o/r/pulls/1 --raw-field=body="Co-Authored-By: Claude"' 'attribution'
+rule deny 'gh api repos/o/r/pulls/1 -f"body=Co-Authored-By: Claude"' 'attribution'
+rule deny 'gh api -f "body=Co-Authored-By: Claude" repos/o/r/pulls/1' 'attribution'
+rule deny 'gh -R o/r api repos/o/r/pulls/1 -f "body=Co-Authored-By: Claude"' 'attribution'
+rule deny "gh api graphql -f query='mutation { addComment(input: {body: \"Co-Authored-By: Claude\"}) { clientMutationId } }'" 'attribution'
+
+# It's a read without fields, and with GET named. Text it's only searching for is fine.
+rule none 'gh api repos/o/r/pulls/1'
+rule none 'gh api --paginate repos/o/r/issues --jq ".[].body"'
+rule none 'gh api -X GET search/issues -f "q=Co-Authored-By: Claude"'
+rule none 'gh api --method get search/issues -f "q=Co-Authored-By: Claude"'
+rule none 'gh api --method=HEAD search/issues -F "q=Co-Authored-By: Claude"'
+rule none 'gh api -XGET search/issues -f "q=Co-Authored-By: Claude"'
+rule none 'gh api -X GET search/issues -F q=@gone.md --input gone.md'
+rule none 'gh api repos/o/r/pulls/1 --jq "Co-Authored-By: Claude"'
+rule none 'gh api repos/o/r/pulls/1 -H "X: Co-Authored-By: Claude"'
+rule none 'gh api repos/o/r/pulls/1 -q ".a" -t "{{.x}}" -p preview --cache 1h --hostname x.example'
+rule none 'gh api --help'
+# Named methods that write, with or without fields.
+rule deny 'gh api -X POST repos/o/r/issues -f "body=Co-Authored-By: Claude"' 'attribution'
+rule deny 'gh api -XPUT repos/o/r/issues -f "body=Co-Authored-By: Claude"' 'attribution'
+rule deny 'gh api --method delete repos/o/r/x -f "body=Co-Authored-By: Claude"' 'attribution'
+rule deny 'gh api --method "$METHOD" repos/o/r/x -f "body=Co-Authored-By: Claude"' 'attribution'
+rule none 'gh api -X DELETE repos/o/r/issues/comments/1'
+rule none 'gh api -X PUT repos/o/r/subscription -F subscribed=true -F ignored=false'
+
+# Text from a file or a heredoc.
+printf '{"body": "Why.\\n\\nCo-Authored-By: Claude"}\n' >"$repo/api-attributed.json"
+printf '{"body":"Co-Authored-By: Claude"}\n' >"$repo/api-first.json"
+printf '{"body": "Clean"}\n' >"$repo/api-clean.json"
+printf 'Assisted-by: Claude\n' >"$repo/api-value.md"
+rule deny 'gh api repos/o/r/issues --input api-attributed.json' 'attribution'
+rule deny 'gh api repos/o/r/issues --input api-first.json' 'attribution'
+rule deny 'gh api repos/o/r/issues --input=api-first.json' 'attribution'
+rule none 'gh api repos/o/r/issues --input api-clean.json'
+rule deny 'gh api repos/o/r/issues -F body=@api-value.md' 'attribution'
+rule deny 'gh api repos/o/r/issues --field=body=@api-value.md' 'attribution'
+rule none 'gh api repos/o/r/issues -f body=@api-value.md'
+rule none 'gh api repos/o/r/issues -F body=@api-clean.json'
+rule deny 'gh api repos/o/r/issues --input gone.json' 'read'
+rule deny 'gh api repos/o/r/issues -F body=@gone.md' 'read'
+rule deny 'cat b.json | gh api repos/o/r/issues --input -' 'read'
+rule deny 'cat b.md | gh api repos/o/r/issues -F body=@-' 'read'
+rule_stdin deny 'attribution' <<'COMMAND'
+gh api repos/o/r/issues --input - <<'EOF'
+{"body":"Co-Authored-By: Claude"}
+EOF
+COMMAND
+rule_stdin deny 'attribution' <<'COMMAND'
+gh api repos/o/r/issues -F body=@- <<'EOF'
+Generated with Claude Code
+EOF
+COMMAND
+rule_stdin none <<'COMMAND'
+gh api repos/o/r/issues --input - <<'EOF'
+{"body":"Clean text about Claude."}
+EOF
+COMMAND
+# A variable holding the text is in the raw command too.
+rule_stdin deny 'attribution' <<'COMMAND'
+BODY='Text.
+
+Co-Authored-By: Claude'
+gh api repos/o/r/issues -f body="$BODY"
+COMMAND
+
 # --- Body files
 
 printf 'Why.\n\nCloses #1\n' >"$repo/clean.md"

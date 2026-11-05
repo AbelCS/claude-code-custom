@@ -124,6 +124,11 @@ expect 'gh --repo=o/r pr merge 1' 'gh|pr|merge|1|'
 expect 'gh -Ro/r pr merge 1' 'gh|pr|merge|1|'
 expect 'gh pr -R o/r merge 1' 'gh|pr|merge|1|'
 expect 'gh pr merge -R o/r 1' 'gh|pr|merge|-R|o/r|1|'
+# gh api has no action word, so what follows it is left as it is.
+expect 'gh api -X POST path -f a=b' 'gh|api|-X|POST|path|-f|a=b|'
+expect 'gh api -f a=b path' 'gh|api|-f|a=b|path|'
+expect 'gh api path' 'gh|api|path|'
+expect 'gh -R o/r api --method PUT path' 'gh|api|--method|PUT|path|'
 
 expect 'git -c k=v commit' 'git|commit|'
 expect 'git --no-pager log' 'git|log|'

@@ -33,8 +33,8 @@ is_folder() {
 # walk_unknown is set once that can't be told from the command's text.
 find_walk_folder() {
   if [ -z "$walk_folder" ]; then
-    find_session_folder
-    walk_folder=$session_folder
+    dw_session_folder
+    walk_folder=$DW_SESSION_FOLDER
   fi
 }
 

@@ -5,22 +5,6 @@
 #
 # shellcheck disable=SC2034,SC2154 # hook-bash.sh sets and reads these variables.
 
-# The text as GitHub would show it. People and tools write \n in a body and mean a line.
-readable_text() {
-  printf '%s\n' "$1" | tr '\037' '\n' | sed 's/\\n/\
-/g'
-}
-
-deny_attribution() {
-  # shellcheck disable=SC2119 # With no file, it reads stdin.
-  readable_text "$1" | dw_has_attribution
-  case $? in
-    0) dw_deny "dev-workflow: AI attribution isn't allowed on GitHub: remove the line that credits the tool, or reword it." ;;
-    1) ;;
-    *) dw_deny "dev-workflow: could not check this text for AI attribution." ;;
-  esac
-}
-
 deny_bad_title() {
   case $1 in
     *"$newline"* | *"$line_in_word"*) ;;
@@ -46,8 +30,8 @@ read_body_file() {
     /*) bf_path=$1 ;;
     \~/*) bf_path=$HOME/${1#\~/} ;;
     *)
-      find_session_folder
-      bf_path=$session_folder/$1
+      dw_session_folder
+      bf_path=$DW_SESSION_FOLDER/$1
       ;;
   esac
   if [ -f "$bf_path" ] && [ -r "$bf_path" ] && bf_text=$(cat -- "$bf_path"); then
@@ -64,7 +48,7 @@ read_gh_text_flag() {
       gt_last_title=${2-}
       gt_has_title=1
       ;;
-    --body | -b | --notes | -n)
+    --body | -b | --notes | -n | --comment | -c)
       gt_body=$gt_body$newline${2-}
       gt_has_body=1
       ;;
@@ -82,9 +66,18 @@ read_gh_text_flag() {
   esac
 }
 
+# Settles standard input once all flags are read. A heredoc is in the raw command and in
+# no word of it, so it joins the text. Anything else on stdin can't be seen from here.
+settle_gh_stdin() {
+  [ -n "$gt_stdin" ] || return 0
+  [ -n "$gt_inline_stdin" ] || dw_deny "dev-workflow: can't read a body piped in on standard input to check it. Pass --body, a file, or a heredoc."
+  gt_body=$gt_body$newline$command_text
+}
+
 # check_gh_text <action> <letters taking a value> <words...>: for each gh command that
 # writes text for people to read. Flags are per command, as a letter means different
-# things in different ones.
+# things in different ones, and --comment takes text only on the close commands: on
+# gh pr review it says what kind of review this is.
 check_gh_text() {
   gt_action=$1
   gt_letters=$2
@@ -98,18 +91,17 @@ check_gh_text() {
   gt_help=
   gt_stdin=
   gt_inline_stdin=
-  walk_flags '--title --body --body-file --notes --notes-file --repo --base --head --assignee --add-assignee --remove-assignee --reviewer --add-reviewer --remove-reviewer --label --add-label --remove-label --project --add-project --remove-project --milestone --template --recover --target --discussion-category --notes-start-tag --type' \
-    "$gt_letters" '' read_gh_text_flag "$@"
+  gt_long='--title --body --body-file --notes --notes-file --repo --base --head --assignee --add-assignee --remove-assignee --reviewer --add-reviewer --remove-reviewer --label --add-label --remove-label --project --add-project --remove-project --milestone --template --recover --target --discussion-category --notes-start-tag --type'
+  case $gt_action in
+    *' close') gt_long="$gt_long --comment --reason --duplicate-of" ;;
+  esac
+  walk_flags "$gt_long" "$gt_letters" '' read_gh_text_flag "$@"
   [ -z "$gt_help" ] || return 0
 
   if [ "$gt_action" = 'pr create' ] && [ -n "$gt_fill" ]; then
     dw_deny "dev-workflow: --fill takes the body from the commits, where the closing keyword can't be checked. Pass --title and --body instead."
   fi
-  if [ -n "$gt_stdin" ]; then
-    [ -n "$gt_inline_stdin" ] || dw_deny "dev-workflow: can't read a body piped in on standard input to check it. Pass --body, a file, or a heredoc."
-    # A heredoc is in the raw command and in no word of it.
-    gt_body=$gt_body$newline$command_text
-  fi
+  settle_gh_stdin
 
   # Text can reach a flag through a variable or a plain heredoc, so the raw command counts,
   # without the quotes that would close a variable's last line.
@@ -126,6 +118,55 @@ check_gh_text() {
       [ -z "$gt_has_body" ] || deny_no_closing_keyword "$gt_body"
       ;;
   esac
+}
+
+# Notes what a gh api call would do, before anything is read for it.
+note_gh_api_flag() {
+  case $1 in
+    --method | -X) ga_method=${2-} ;;
+    --raw-field | -f | --field | -F | --input) ga_sends=1 ;;
+    --help | -h) ga_help=1 ;;
+  esac
+}
+
+read_gh_api_flag() {
+  case $1 in
+    --raw-field | -f) gt_body=$gt_body$newline${2#*=} ;;
+    --field | -F)
+      case ${2#*=} in
+        @*) read_body_file "${2#*=@}" ;;
+        *) gt_body=$gt_body$newline${2#*=} ;;
+      esac
+      ;;
+    --input) read_body_file "${2-}" ;;
+    '')
+      case $2 in
+        '<<'*) gt_inline_stdin=1 ;;
+      esac
+      ;;
+  esac
+}
+
+# What gh api sends is mostly JSON, where a field's text doesn't start a line, so every
+# quote ends one here. Without a named method, gh sends fields with POST.
+check_gh_api() {
+  ga_method=
+  ga_sends=
+  ga_help=
+  ga_long='--method --field --raw-field --input --header --hostname --jq --template --preview --cache'
+  walk_flags "$ga_long" XfFHqtp '' note_gh_api_flag "$@"
+  [ -z "$ga_help" ] || return 0
+  case $ga_method in
+    [Gg][Ee][Tt] | [Hh][Ee][Aa][Dd]) return 0 ;;
+    '') [ -n "$ga_sends" ] || return 0 ;;
+  esac
+
+  gt_body=
+  gt_stdin=
+  gt_inline_stdin=
+  walk_flags "$ga_long" XfFHqtp '' read_gh_api_flag "$@"
+  settle_gh_stdin
+  deny_attribution "$(printf '%s\n%s\n' "$gt_body" "$command_text" | tr '"' '\n' | tr "'" '\n')"
 }
 
 read_gh_merge_flag() {
@@ -159,6 +200,11 @@ check_gh_merge() {
 }
 
 check_gh() {
+  if [ "${1-}" = api ]; then
+    shift
+    check_gh_api "$@"
+    return
+  fi
   ch_group=${1-}
   ch_action=${2-}
   [ "$#" -lt 2 ] || shift 2
@@ -171,5 +217,8 @@ check_gh() {
     'issue edit') check_gh_text 'issue edit' bFtR "$@" ;;
     'issue comment') check_gh_text 'issue comment' bFR "$@" ;;
     'release create' | 'release edit') check_gh_text "$ch_group $ch_action" FntR "$@" ;;
+    'pr review') check_gh_text 'pr review' bFR "$@" ;;
+    'pr close') check_gh_text 'pr close' cR "$@" ;;
+    'issue close') check_gh_text 'issue close' crR "$@" ;;
   esac
 }
