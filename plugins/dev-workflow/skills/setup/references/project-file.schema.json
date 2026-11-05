@@ -1,0 +1,121 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "dev-workflow project file",
+  "description": "Facts about one project, in .claude/dev-workflow.json. Its presence turns the dev-workflow hooks on. The setup skill writes it, and generates .githooks/dev-workflow.env from it: after editing it, run the setup skill again. scripts/setup/project-file.sh validate checks a file against this schema, using only these keywords: type, const, required, properties, additionalProperties, items, minLength, pattern, not and allOf. Where a part has x-error, that is the message shown when it fails.",
+  "type": "object",
+  "x-error": "has to be one JSON object",
+  "required": ["schemaVersion", "pluginVersion", "commands"],
+  "additionalProperties": false,
+  "properties": {
+    "schemaVersion": {
+      "description": "The version of this file's layout. Setup sets it.",
+      "const": 1
+    },
+    "pluginVersion": {
+      "description": "The version of the plugin that last ran setup here. Setup sets it.",
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+",
+      "x-error": "has to be a version, such as 1.0.0"
+    },
+    "stack": {
+      "description": "The stack files that apply, by name, such as node-tooling. When setup runs, each stack's database reset commands are copied into databaseResetCommands.",
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[a-z0-9][a-z0-9-]*$",
+        "x-error": "has to be a stack name: lowercase letters, digits and dashes"
+      }
+    },
+    "hasScreens": {
+      "description": "Whether the project has screens people use.",
+      "type": "boolean"
+    },
+    "defaultBranch": {
+      "description": "The default branch, which pushes are kept off. Missing means main.",
+      "type": "string",
+      "pattern": "^[^\\s]+$",
+      "x-error": "has to be a branch name"
+    },
+    "commands": {
+      "description": "The project's commands. Only check is required.",
+      "type": "object",
+      "required": ["check"],
+      "additionalProperties": false,
+      "properties": {
+        "check": {
+          "description": "The fast checks the pre-push hook runs, such as npm run check. Every project needs one.",
+          "type": "string",
+          "minLength": 1,
+          "x-error": "has to be the command that runs the fast checks, such as npm run check"
+        },
+        "verify": { "description": "The full checks, before a release.", "type": "string" },
+        "format": { "description": "Formats the whole project.", "type": "string" },
+        "deadCode": { "description": "Finds unused code.", "type": "string" },
+        "audit": { "description": "Audits the dependencies.", "type": "string" },
+        "formatCheckStaged": {
+          "description": "The formatting checks the pre-commit hook runs on staged files, one rule per glob, so a mixed repo can have several. Each command gets the matching files as arguments and must only check them, exiting non-zero when one isn't formatted: a command that rewrites files, with --write, -w or --fix, is refused. A glob is a shell case pattern, where * also matches /: brace globs such as *.{ts,tsx} don't expand, so write one rule for *.ts and one for *.tsx.",
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["glob", "command"],
+            "additionalProperties": false,
+            "properties": {
+              "glob": {
+                "description": "The files the command checks, such as *.ts.",
+                "type": "string",
+                "allOf": [
+                  {
+                    "pattern": "^[^|\\n]+$",
+                    "x-error": "has to be a glob such as *.ts, without | or a line break, which separate the rules in dev-workflow.env"
+                  },
+                  {
+                    "not": { "pattern": "[{}]" },
+                    "x-error": "has braces, which the hook's case pattern doesn't expand: write one rule per glob, such as *.ts and *.tsx"
+                  }
+                ]
+              },
+              "command": {
+                "description": "The check, such as npx prettier --check.",
+                "type": "string",
+                "allOf": [
+                  {
+                    "pattern": "^[^\\n]+$",
+                    "x-error": "has to be a command on one line"
+                  },
+                  {
+                    "not": { "pattern": "(^|\\s)(--write|-w|--fix)(=|\\s|$)" },
+                    "x-error": "rewrites files: a formatter here must check, not rewrite, such as prettier --check or gofmt -l"
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    "testCommands": {
+      "description": "Commands that run tests, which the hooks treat as the project's own.",
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "databaseResetCommands": {
+      "description": "Commands that wipe a database, which the hooks hold for a person's yes. Setup adds each stack's list from plugins/dev-workflow/stacks/<stack>.resets, when that file exists: one command per line, with blank lines and lines starting with # left out.",
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "ciAllowlist": {
+      "description": "Workflows allowed per-PR triggers, by path from the repo's root. CI otherwise runs only for releases.",
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^\\.github/workflows/[^/\\n]+\\.ya?ml$",
+        "x-error": "has to be a workflow's path, such as .github/workflows/release.yml"
+      }
+    },
+    "managed": {
+      "description": "The ledger: a fingerprint of each thing setup wrote, by path, so a rerun can tell what the project edited. Setup keeps it.",
+      "type": "object",
+      "additionalProperties": { "type": "string" }
+    }
+  }
+}

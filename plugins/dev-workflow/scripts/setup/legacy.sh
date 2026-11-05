@@ -117,3 +117,23 @@ legacy_blocks_in() {
     }
   '
 }
+
+# legacy_claude_state <file>: prints what a CLAUDE.md is: "absent", a "symlink", the
+# "import" @AGENTS.md, an old "pointer", or "content", which is anything else,
+# including a file that can't be read.
+legacy_claude_state() {
+  if [ -L "$1" ]; then
+    echo symlink
+  elif [ ! -e "$1" ]; then
+    echo absent
+  elif [ ! -f "$1" ] || [ ! -r "$1" ]; then
+    echo content
+  elif [ "$(legacy_normalise <"$1")" = "@AGENTS.md" ]; then
+    echo import
+  else
+    case $(legacy_match_block "$1") in
+      pointer-*) echo pointer ;;
+      *) echo content ;;
+    esac
+  fi
+}

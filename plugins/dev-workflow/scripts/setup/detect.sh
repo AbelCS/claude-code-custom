@@ -197,20 +197,7 @@ agents=false
 if exists "$root/AGENTS.md"; then agents=true; fi
 
 claude_file=$root/CLAUDE.md
-if [ -L "$claude_file" ]; then
-  claude=symlink
-elif [ ! -e "$claude_file" ]; then
-  claude=absent
-elif [ ! -f "$claude_file" ] || [ ! -r "$claude_file" ]; then
-  claude=content
-elif [ "$(legacy_normalise <"$claude_file")" = "@AGENTS.md" ]; then
-  claude=import
-else
-  case $(legacy_match_block "$claude_file") in
-    pointer-*) claude=pointer ;;
-    *) claude=content ;;
-  esac
-fi
+claude=$(legacy_claude_state "$claude_file")
 
 blocks=
 for file in "$root/AGENTS.md" "$claude_file"; do
