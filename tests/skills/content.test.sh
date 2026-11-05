@@ -115,13 +115,16 @@ REFS
 done
 [ "$found" -gt 0 ] || _assert_fail "no skills found in $SKILLS"
 
-# --- what each skill's rules must say, one "skill|text" a line
+# --- what each skill's rules must say, one "skill|text" a line, in any capitals, so
+# a rule can start a sentence
+
+lowered() { tr '[:upper:]' '[:lower:]'; }
 
 while IFS='|' read -r skill needle; do
   [ -n "$skill" ] || continue
   [ -f "$SKILLS/$skill/SKILL.md" ] || _assert_fail "no skill $skill"
-  case "$(text "$skill")" in
-    *"$needle"*) ;;
+  case "$(text "$skill" | lowered)" in
+    *"$(printf '%s' "$needle" | lowered)"*) ;;
     *) _assert_fail "$skill doesn't say: $needle" ;;
   esac
 done <<'TABLE'
@@ -158,4 +161,69 @@ independent-review|Codex is missing
 independent-review|Never skip it silently
 independent-review|ask whether to go ahead without it
 independent-review|placeholder rather than a value
+screen-check|Every screen the change touches
+screen-check|light
+screen-check|dark
+screen-check|360
+screen-check|keyboard
+screen-check|empty, filled and long
+screen-check|If no browser tool is available
+screen-check|Never skip it silently
+screen-check|Fix what you find before reporting
+screen-check|/dev-workflow:conventions-ui
+conventions-code|Domain first
+conventions-code|glossary
+conventions-code|Small, focused files
+conventions-code|contracts, queries, actions, tasks, input, rules, labels, ui
+conventions-code|stack file
+conventions-code|lint errors
+conventions-code|depend downwards
+conventions-code|never reads the database directly
+conventions-code|A query fetches, a pure function shapes
+conventions-code|named pure functions with unit tests
+conventions-code|real database, signed in as a real role
+conventions-code|every row
+conventions-code|row limits
+conventions-code|page by a unique key
+conventions-code|Validate on the server
+conventions-code|in the data layer as well as in code
+conventions-code|with or without row-level security
+conventions-code|Where the database enforces access rules on each row
+conventions-code|Where it doesn't
+conventions-code|data-access layer
+conventions-code|Every new table gets its access rules and a test of them
+conventions-code|all or nothing
+conventions-code|structured data
+conventions-code|append
+conventions-code|only through migrations
+conventions-code|Never reset the owner's local database without asking
+conventions-code|work in place
+conventions-code|parity test
+conventions-ui|Short labels
+conventions-ui|Never say it twice
+conventions-ui|(optional)
+conventions-ui|Reread every string
+conventions-ui|design system
+conventions-ui|showcase
+conventions-ui|Theme tokens only
+conventions-ui|One type scale
+conventions-ui|reduced motion
+conventions-ui|one helper
+conventions-ui|4.5:1
+conventions-ui|3:1
+conventions-ui|visible focus
+conventions-ui|accessible names
+conventions-ui|never colour alone
+conventions-ui|menu equivalent for drag and drop
+conventions-ui|skip link
+conventions-ui|screen-reader summary
+conventions-ui|hand cursor
+conventions-ui|`title`
+conventions-ui|360
+conventions-ui|16 px
+conventions-ui|40 px
+conventions-ui|loading skeleton
+conventions-ui|connection error
+conventions-ui|project's own theme
+conventions-ui|/dev-workflow:screen-check
 TABLE
