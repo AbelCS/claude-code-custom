@@ -87,6 +87,7 @@ Tools needed: `git`, `gh`, `jq`, `uvx` and `claude` (Claude Code 2.1.295 or late
 ## Tools
 
 - Superpowers is the process, and skills are announced ("Using brainstorming to ..."): `brainstorming`, `writing-plans`, `test-driven-development`, `systematic-debugging`, `verification-before-completion`, `receiving-code-review`, `finishing-a-development-branch`.
+- Until the plugin's `land` skill exists, landing follows the Workflow section here instead of that last skill's menu. Work happens in place on a branch, with no worktree or question just to protect a running dev server.
 - Context7 for current docs.
 - Serena for reading and changing code by symbol, moves and renames. No Serena memories: what's worth keeping goes here or in `docs/`.
 - `/security-review` for changes to permissions or anything public.

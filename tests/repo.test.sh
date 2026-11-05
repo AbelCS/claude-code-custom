@@ -18,6 +18,9 @@ agents=$(cat "$ROOT/AGENTS.md")
 assert_contains "$agents" "Closes #"
 # A fresh clone has no hooks until someone runs this.
 assert_contains "$agents" "git config core.hooksPath .githooks"
+# Without this, the superpowers skill's menu conflicts with the Workflow section.
+assert_contains "$agents" "landing follows the Workflow section here"
+assert_contains "$agents" "no worktree or question just to protect a running dev server"
 
 # --- docs
 
@@ -25,7 +28,10 @@ spec=docs/superpowers/specs/2026-11-05-dev-workflow-methodology-design.md
 assert_exit 0 test -f "$ROOT/$spec"
 assert_exit 0 test -f "$ROOT/docs/superpowers/plans/2026-11-05-dev-workflow-methodology.md"
 assert_contains "$(cat "$ROOT/docs/decisions.md")" "${spec#docs/}"
-assert_exit 0 test -f "$ROOT/docs/maintenance.md"
+# It explains the format and records no run until one has happened.
+maintenance=$(cat "$ROOT/docs/maintenance.md")
+assert_contains "$maintenance" "YYYY-MM-DD"
+assert_exit 1 grep -Eq '^- |[0-9]{4}-[0-9]{2}-[0-9]{2}' "$ROOT/docs/maintenance.md"
 
 # --- .claude/dev-workflow.json
 
