@@ -1,0 +1,28 @@
+#!/bin/sh
+# Everything: check, then the slower tests in tests/verify_only/.
+
+set -u
+
+root=$(cd "$(dirname "$0")/.." && pwd)
+
+sh "$root/scripts/check" || exit 1
+
+passed=0
+failed=0
+for test_file in "$root"/tests/verify_only/*.test.sh; do
+  [ -f "$test_file" ] || continue
+  if sh "$test_file" </dev/null; then
+    passed=$((passed + 1))
+    echo "ok      $test_file"
+  else
+    failed=$((failed + 1))
+    echo "not ok  $test_file"
+  fi
+done
+
+echo "verify_only: $passed passed, $failed failed"
+if [ $((passed + failed)) -eq 0 ]; then
+  echo "verify: no tests found in tests/verify_only" >&2
+  exit 1
+fi
+[ "$failed" -eq 0 ]

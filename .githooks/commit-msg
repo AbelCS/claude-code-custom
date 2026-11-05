@@ -1,0 +1,32 @@
+#!/bin/sh
+# Starter hook, replaced by the plugin's template: checks the commit message
+# format and rejects AI attribution. Git runs it as: commit-msg <message file>
+
+# Bytes, so a footer's leading emoji counts as not being a letter or digit.
+LC_ALL=C
+export LC_ALL
+
+reject() {
+  printf 'commit-msg: %s\n' "$*" >&2
+  exit 1
+}
+
+# Git passes comments and the diff of `commit -v` too, and removes them later.
+message=$(sed -e '/^# -* >8 -*$/,$d' -e '/^#/d' "$1") || reject "could not read $1"
+subject=$(printf '%s\n' "$message" | sed -n '/[^[:space:]]/{p;q;}')
+
+types='feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert'
+printf '%s\n' "$subject" |
+  grep -Eq "^((fixup|squash)! )?($types)(\([^)]+\))?!?: .*[^ ] \(#[0-9]+\)$" ||
+  reject "expected \"<type>(<scope>): <subject> (#<issue>)\", got: $subject"
+
+# A co-author is an AI when the name is only a tool's, or the address a vendor's.
+# People can share a name with a tool, so a longer name with another address passes.
+tools='claude|copilot|chatgpt|codex|gemini|cursor|aider|devin'
+vendors='anthropic\.com|openai\.com|cursor\.com|aider\.chat'
+attribution="^co-authored-by:[[:space:]]*(github )?($tools)( code| cli| agent)?[[:space:]]*(<|$)"
+attribution="$attribution|^co-authored-by:.*@($vendors)"
+attribution="$attribution|^[^[:alnum:]]*(generated|written) (with|by) .*($tools)"
+if printf '%s\n' "$message" | grep -Eiq "$attribution"; then
+  reject "AI attribution isn't allowed: remove the line naming the tool"
+fi

@@ -1,0 +1,4 @@
+.DS_Store
+.leak-terms.local
+plugins/*/evals/results/
+.claude/settings.local.json

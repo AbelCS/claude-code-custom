@@ -1,0 +1,16 @@
+#!/bin/sh
+# Starter hook, replaced by the plugin's template: blocks direct pushes to main,
+# then runs scripts/check. Git runs it as: pre-push <remote name> <remote url>,
+# with a "<local ref> <local sha> <remote ref> <remote sha>" line per ref on stdin.
+
+while read -r _ _ remote_ref _; do
+  [ "$remote_ref" = refs/heads/main ] || continue
+  # A new repo's first push finds no branches on the remote.
+  branches=$(git ls-remote --heads "$2" </dev/null) || exit 1
+  if [ -n "$branches" ]; then
+    echo "pre-push: don't push directly to main: open a pull request" >&2
+    exit 1
+  fi
+done
+
+exec sh "$(dirname "$0")/../scripts/check" </dev/null

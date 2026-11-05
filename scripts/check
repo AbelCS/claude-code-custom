@@ -1,0 +1,39 @@
+#!/bin/sh
+# The fast checks: tests, plugin validation and shell lint. Warnings from
+# claude plugin validate don't fail it.
+
+set -eu
+
+missing=0
+for tool in uvx claude; do
+  if ! command -v "$tool" >/dev/null 2>&1; then
+    echo "check: missing required tool: $tool" >&2
+    missing=1
+  fi
+done
+[ "$missing" -eq 0 ]
+
+cd "$(dirname "$0")/.."
+
+sh tests/run.sh
+claude plugin validate plugins/dev-workflow
+claude plugin validate .
+
+# Every shell file git would keep, by extension or by first line. -z stops git
+# quoting unusual names, which would hide those files from the lint. The pipeline
+# would lose a git failure, so the first call is there to catch one.
+git ls-files --cached --others --exclude-standard >/dev/null
+candidates=$(git ls-files -z --cached --others --exclude-standard | tr '\0' '\n')
+set --
+while IFS= read -r file; do
+  [ -f "$file" ] || continue
+  case "$file" in
+    *.sh) set -- "$@" "$file" ;;
+    *) if head -n 1 "$file" | grep -Eq '^#!.*[/ ](sh|bash)( |$)'; then set -- "$@" "$file"; fi ;;
+  esac
+done <<LIST
+$candidates
+LIST
+
+# -x follows sourced files, named from the repo root in source= directives.
+uvx --from shellcheck-py shellcheck -x "$@"
