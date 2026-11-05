@@ -49,22 +49,34 @@ rule() {
 
 attributed='"Why.\n\nCo-Authored-By: Claude <noreply@anthropic.com>"'
 
-# --- The matcher for hooks.json, which Task 9 registers in this form
+# --- The matcher in hooks.json, tested as Claude Code uses it: a pattern with these
+# characters is a regular expression, matching anywhere in the name
 
-matcher='mcp__.*github.*'
+matcher=$(jq -re '.hooks.PreToolUse[]
+  | select(.hooks[].args == ["${CLAUDE_PLUGIN_ROOT}/scripts/hook-github-mcp.sh"])
+  | .matcher' "$plugin/hooks/hooks.json") || _assert_fail "hooks.json has no matcher for the GitHub hook"
 matched() {
-  printf '%s\n' "$1" | grep -Eq "^($matcher)\$"
+  printf '%s\n' "$1" | grep -Eq "$matcher"
 }
 for name in \
   mcp__plugin_github_github__create_pull_request \
   mcp__plugin_github_github__get_me \
   mcp__github__merge_pull_request \
-  mcp__github-enterprise__issue_write; do
+  mcp__github-enterprise__issue_write \
+  mcp__claude_ai_GitHub__x \
+  mcp__claude_ai_Github__create_pull_request; do
   assert_exit 0 matched "$name"
 done
 for name in Bash Write mcp__plugin_vercel_vercel__list_projects github mcp_github_x; do
   assert_exit 1 matched "$name"
 done
+
+# The hook reads a connector's tools by the same last part of the name.
+connector_call=$(tool_input mcp__claude_ai_GitHub__create_pull_request "{\"title\": \"feat: x\", \"body\": $attributed}")
+assert_decision deny "$hook" "$connector_call"
+assert_contains "$(reason_of "$hook" "$connector_call")" 'attribution'
+connector_call=$(tool_input mcp__claude_ai_GitHub__get_me '{}')
+assert_decision none "$hook" "$connector_call"
 
 # --- Attribution in any string field of a tool that isn't clearly read-only
 

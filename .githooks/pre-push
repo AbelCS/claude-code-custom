@@ -85,7 +85,7 @@ fi
 
 [ "$blocked" -eq 0 ] || exit 1
 
-# Nothing but deletions, or nothing at all when everything is up to date.
+# Nothing but deletions and notes, or nothing at all when everything is up to date.
 [ "$publishes" -eq 1 ] || exit 0
 
 if [ -z "$DW_CHECK" ]; then

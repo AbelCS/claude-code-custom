@@ -32,6 +32,8 @@ assert_contains "$(cat "$ROOT/docs/decisions.md")" "${spec#docs/}"
 maintenance=$(cat "$ROOT/docs/maintenance.md")
 assert_contains "$maintenance" "YYYY-MM-DD"
 assert_exit 1 grep -Eq '^- |[0-9]{4}-[0-9]{2}-[0-9]{2}' "$ROOT/docs/maintenance.md"
+# What the live tests saw, with the version they saw it on.
+assert_exit 0 grep -Eq 'Claude Code [0-9]+\.[0-9]+\.[0-9]+' "$ROOT/docs/hook-behaviour.md"
 
 # --- .claude/dev-workflow.json
 

@@ -1,5 +1,58 @@
 {
   "name": "dev-workflow",
-  "description": "General development workflow rules for Claude Code projects (issue-driven development, etc.)",
-  "version": "0.2.0"
+  "description": "Sets up a repo with a full development methodology and enforces what must always hold: decisions, workflow, testing, code and tools",
+  "version": "0.2.0",
+  "author": {
+    "name": "AbelCS"
+  },
+  "userConfig": {
+    "model_noncoding": {
+      "type": "string",
+      "title": "Model for non-coding work",
+      "description": "The model for specs, plans and other work that isn't code",
+      "default": "claude-fable-5-1"
+    },
+    "model_noncoding_alt": {
+      "type": "string",
+      "title": "Alternative model for non-coding work",
+      "description": "A second opinion on non-coding work, from OpenAI through the Codex CLI",
+      "default": "gpt-6-astra"
+    },
+    "model_coding": {
+      "type": "string",
+      "title": "Model for coding",
+      "description": "The model for writing code",
+      "default": "claude-opus-5-5"
+    },
+    "effort_coding": {
+      "type": "string",
+      "title": "Effort for coding",
+      "description": "The reasoning effort for writing code",
+      "default": "high"
+    },
+    "reviewer_name": {
+      "type": "string",
+      "title": "Reviewer's name",
+      "description": "Shown when announcing an independent review",
+      "default": "GPT-6.1 Sol (OpenAI, high effort, read-only)"
+    },
+    "reviewer_command": {
+      "type": "string",
+      "title": "Reviewer command",
+      "description": "The command that runs an independent review, with <brief> where the brief goes",
+      "default": "codex exec -m gpt-6.1-sol -c model_reasoning_effort=high --sandbox read-only \"<brief>\" < /dev/null"
+    },
+    "review_threshold_lines": {
+      "type": "number",
+      "title": "Review threshold, in lines",
+      "description": "A pull request with more changed lines than this gets an independent review",
+      "default": 300
+    },
+    "maintenance_interval_days": {
+      "type": "number",
+      "title": "Maintenance interval, in days",
+      "description": "The session-start check says maintenance is overdue after this many days",
+      "default": 30
+    }
+  }
 }

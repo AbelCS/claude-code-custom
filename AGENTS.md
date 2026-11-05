@@ -12,14 +12,14 @@ A fresh clone has no git hooks until you run this:
 git config core.hooksPath .githooks
 ```
 
-Tools needed: `git`, `gh`, `jq`, `uvx` and `claude` (Claude Code 2.1.295 or later). The leak search also needs `.leak-terms.local`, a private git-ignored file with one term per line. Never print or quote its terms.
+Tools needed: `git`, `gh`, `jq`, `uvx` and `claude` (Claude Code 2.1.295 or later), and `npm` for the live hook tests. The leak search also needs `.leak-terms.local`, a private git-ignored file with one term per line. Never print or quote its terms.
 
 ## Commands
 
 | Command | What it does |
 |---|---|
 | `scripts/check` | Script tests, plugin validation and shell lint. `pre-push` runs it. |
-| `scripts/verify` | `check`, then the slower tests in `tests/verify_only/`, including the leak search. |
+| `scripts/verify` | `check`, then the slower tests in `tests/verify_only/`: the leak search, and live hook tests that spend a few cents on real sessions. `DW_SKIP_LIVE=1` skips those, visibly. |
 | `sh tests/<name>.test.sh` | One test. |
 
 ## Layout
@@ -35,6 +35,7 @@ Tools needed: `git`, `gh`, `jq`, `uvx` and `claude` (Claude Code 2.1.295 or late
 | `tests/` | Tests, with helpers in `tests/lib/`. They never ship in a plugin. |
 | `docs/superpowers/specs/`, `docs/superpowers/plans/` | Approved specs and plans |
 | `docs/decisions.md`, `docs/maintenance.md` | The decision log and the maintenance record |
+| `docs/hook-behaviour.md` | What the plugin's hooks were seen to do in real sessions, from the live tests |
 
 ## Glossary
 
@@ -81,7 +82,7 @@ Tools needed: `git`, `gh`, `jq`, `uvx` and `claude` (Claude Code 2.1.295 or late
 
 - Test first: every feature, bug fix, refactor and behaviour change.
 - `tests/run.sh` runs test files all at once, so each one uses only its own temp folders.
-- Tests run locally through git hooks. `pre-commit` checks the formatting of staged files when formatters are configured, and blocks a workflow that gains a per-PR trigger. `commit-msg` checks the format, requires the issue number on a `<type>/<issue>-<slug>` branch and rejects attribution. `pre-push` blocks direct pushes to `main`, except a new repo's first push, and runs `scripts/check`. That runs on the checkout, so `pre-push` fails if a pushed ref isn't what's checked out, and warns if the work tree has uncommitted changes.
+- Tests run locally through git hooks. `pre-commit` checks the formatting of staged files when formatters are configured, and blocks a workflow that gains a per-PR trigger. `commit-msg` checks the format, requires the issue number on a `<type>/<issue>-<slug>` branch and rejects attribution. `pre-push` blocks direct pushes to `main`, except a new repo's first push, and runs `scripts/check`. That runs on the checkout, so `pre-push` fails if a pushed ref isn't what's checked out, except notes, which hold no code and need no check, and warns if the work tree has uncommitted changes.
 - CI runs only for releases. Never add per-PR pipelines.
 - A flaky test is a bug until proven otherwise: find the root cause before rerunning or retrying. Only rerun for a proven environmental cause, such as the laptop sleeping, and say so.
 
