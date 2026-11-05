@@ -88,6 +88,12 @@ assert_contains "$workflow" "<type>/<issue>-<slug>"
 assert_contains "$(cat "$TEMPLATES/testing.md")" "Never add per-PR pipelines"
 assert_contains "$(cat "$TEMPLATES/testing.md")" "--no-verify"
 
+# A README and docs from a stable 1.0.0, or earlier if the owner asks, kept current.
+decisions=$(cat "$TEMPLATES/decisions.md")
+assert_contains "$decisions" "README and docs"
+assert_contains "$decisions" "1.0.0"
+assert_contains "$decisions" "or earlier if the owner asks"
+
 # Models: the routing rule, read from the plugin's settings, never a name.
 assert_contains "$models" "/config"
 assert_contains "$models" "coding"

@@ -21,6 +21,7 @@ Tools needed: `git`, `gh`, `jq`, `uvx` and `claude` (Claude Code 2.1.295 or late
 | `scripts/check` | Script tests, plugin validation and shell lint. `pre-push` runs it. |
 | `scripts/verify` | `check`, then the slower tests in `tests/verify_only/`: the leak search, live hook tests that spend a few cents on real sessions, and setup run end to end on the apps in `tests/fixtures/`, with their database tests in Docker. `DW_SKIP_LIVE=1` and `DW_SKIP_FIXTURES=1` skip those two, visibly. |
 | `sh tests/<name>.test.sh` | One test. |
+| `claude plugin eval plugins/dev-workflow --ablation none --max-cost-usd 4` | The skill evals in `plugins/dev-workflow/evals/`: does each skill come in on natural phrasing and stay out otherwise. Real sessions, about $3. Results go to its git-ignored `results/`. |
 
 ## Layout
 
@@ -65,6 +66,7 @@ Tools needed: `git`, `gh`, `jq`, `uvx` and `claude` (Claude Code 2.1.295 or late
 - Do the whole ask. Don't leave obvious parts out and offer them as options.
 - Report honestly: run it, read the output, then claim it. Say what was skipped or failed.
 - `AGENTS.md` stays current, updated in the same pull request as the change.
+- A project gets a README and docs once it reaches a stable 1.0.0, or earlier if the owner asks for them. From then on they stay current, updated in the same pull request as the change.
 - Use the latest stable versions, verified rather than remembered.
 
 ## Workflow

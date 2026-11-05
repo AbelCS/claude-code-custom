@@ -28,8 +28,8 @@ Run `sh ${CLAUDE_PLUGIN_ROOT}/scripts/setup/tools.sh .` and report each tool as 
 
 One question at a time, each with your recommendation first and why. Skip any whose answer you already read. In this order:
 
-1. **The stack.** Confirm `stackHints`. If no stack has been decided, as in a new project, hand over to `/dev-workflow:choose-stack` and continue once it is.
-2. **The commands:** `check` is required, as `pre-push` runs it. Then `verify`, formatting checks for staged files, and the optional ones. `references/answers.md` lists them.
+1. **The stack.** Confirm `stackHints`. If no stack has been decided, as in a new project, hand over to `/dev-workflow:choose-stack` and continue once it is. Then read only the chosen stacks' files, `${CLAUDE_PLUGIN_ROOT}/stacks/<name>.md` for each name in `stack`, and no others.
+2. **The commands:** `check` is required, as `pre-push` runs it. Then `verify`, formatting checks for staged files, and the optional ones. `references/answers.md` lists them, and the stack files say how their stack fills them. With no stack file, ask for each.
 3. **Screens:** whether people use screens in it.
 4. **A database,** with or without row-level security, and its reset commands, if any.
 5. **The default branch,** only when there's no remote to read it from.
