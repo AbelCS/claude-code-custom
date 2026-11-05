@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "pluginVersion": "1.0.0",
+  "stack": [],
+  "hasScreens": false,
+  "commands": {
+    "check": "scripts/check",
+    "verify": "scripts/verify"
+  }
+}
