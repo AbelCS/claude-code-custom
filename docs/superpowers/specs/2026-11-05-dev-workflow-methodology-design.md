@@ -61,6 +61,7 @@ Success looks like this: the owner runs one command in any web repo, new or old,
 | Branch cleanup | At landing, plus a sweep in `maintain` that deletes only branches proven merged. |
 | Stack files | Node tooling, Next.js, Astro and Supabase. Any other stack uses the no-file route. |
 | Test setups | The four in section 11. |
+| Build cost, from part 3 on (owner, 2026-11-05) | A fresh implementer per task, never resumed. No per-task review: one independent review per part before merging. Fix rounds only for problems in ordinary use, with edge cases listed. Two real test setups instead of four (section 11). |
 | Delivery | #1 is split into smaller issues, each with its own squash-merged pull request, merged one at a time and not stacked: (1) this repo adopts the methodology, (2) enforcement, (3) `setup` and upgrades, (4) skills and stack files, (5) migration and 1.0.0. The agent merges each when green without asking, and the owner can stop it between steps. |
 
 **Calls made while writing this document, open to challenge when reviewing it**
@@ -298,10 +299,10 @@ Unknown stacks: `setup` asks for the commands and writes them to the project fil
 
 | Setup | Proves | Upgrade case |
 |---|---|---|
-| Next.js with Supabase | The full case, row-level security | Old block in `AGENTS.md`, old pointer |
-| Astro, no database | The smallest case | Old block in `CLAUDE.md`, at the older plugin version |
-| uv, Litestar, Postgres in Docker | No Node, no row-level security, no stack file | Empty repo |
-| Rust server with a `ui/` folder | Compiled language, two formatters, slow `check` | Old blocks in `AGENTS.md` with an existing release-please setup |
+| Next.js with Supabase | The full case, row-level security | Old block in `AGENTS.md`, old pointer, existing release-please setup |
+| uv, Litestar, Postgres in Docker | No Node, no row-level security, no stack file | Empty repo, and old block in `CLAUDE.md` at the older plugin version |
+
+The Astro and Rust setups were dropped on 2026-11-05 to cut build cost. Mixed repos with two formatters are covered by script tests rather than a full setup.
 
 Every setup also gets: an existing repo with no prior setup, a rerun changing nothing, and a rerun with project edits that survive. Skills that need a live session are covered by evals, and the deterministic work by script tests.
 
