@@ -1,0 +1,13 @@
+# The plugins the methodology relies on. hook-session-start.sh and setup/tools.sh both
+# read this list, so it's kept in one place. One plugin a line, its fields split by
+# spaces:
+#   name         the plugin's name, which any marketplace's copy can have
+#   when         always, or screens for a project with screens
+#   marketplace  what claude plugin marketplace add takes first, or - for the official
+#                marketplace, which Claude Code already has
+#   id           what claude plugin install takes
+superpowers always - superpowers@claude-plugins-official
+context7 always - context7@claude-plugins-official
+serena always - serena@claude-plugins-official
+intent screens ghaida/intent intent@intent
+ui-ux-pro-max screens nextlevelbuilder/ui-ux-pro-max-skill ui-ux-pro-max@ui-ux-pro-max-skill
