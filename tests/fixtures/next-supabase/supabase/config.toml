@@ -1,0 +1,41 @@
+# Only the database runs, under a project id and ports of its own, so this never meets
+# another local Supabase stack. scripts/db-test.sh checks both before it starts.
+project_id = "dwtest-next-supabase"
+
+[api]
+enabled = false
+port = 55621
+
+[db]
+port = 55622
+shadow_port = 55620
+major_version = 17
+
+[db.pooler]
+enabled = false
+port = 55629
+
+[realtime]
+enabled = false
+
+[studio]
+enabled = false
+port = 55623
+
+[local_smtp]
+enabled = false
+port = 55624
+
+[storage]
+enabled = false
+
+[auth]
+enabled = false
+
+[edge_runtime]
+enabled = false
+inspector_port = 55683
+
+[analytics]
+enabled = false
+port = 55627

@@ -1,0 +1,13 @@
+{
+  "stack": [],
+  "hasScreens": false,
+  "defaultBranch": "main",
+  "commands": {
+    "check": "sh scripts/check",
+    "verify": "sh scripts/verify",
+    "format": "uv run ruff format .",
+    "formatCheckStaged": [{ "glob": "*.py", "command": "uv run --frozen ruff format --check" }]
+  },
+  "testCommands": ["uv run pytest", "sh scripts/db-test.sh"],
+  "approvals": { "githubSettings": false, "mergePermission": false, "installPlugins": false }
+}

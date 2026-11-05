@@ -1,0 +1,7 @@
+#!/bin/sh
+# Everything: the fast checks, then the data-access tests against Postgres in Docker.
+
+set -e
+cd "$(dirname "$0")/.."
+sh scripts/check
+sh scripts/db-test.sh

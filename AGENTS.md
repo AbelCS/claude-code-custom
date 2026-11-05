@@ -12,14 +12,14 @@ A fresh clone has no git hooks until you run this:
 git config core.hooksPath .githooks
 ```
 
-Tools needed: `git`, `gh`, `jq`, `uvx` and `claude` (Claude Code 2.1.295 or later), and `npm` for the live hook tests. The leak search also needs `.leak-terms.local`, a private git-ignored file with one term per line. Never print or quote its terms.
+Tools needed: `git`, `gh`, `jq`, `uvx` and `claude` (Claude Code 2.1.295 or later), `npm` for the live hook tests, and `npm`, `uv`, `nc` and a running Docker for the fixtures test. The leak search also needs `.leak-terms.local`, a private git-ignored file with one term per line. Never print or quote its terms.
 
 ## Commands
 
 | Command | What it does |
 |---|---|
 | `scripts/check` | Script tests, plugin validation and shell lint. `pre-push` runs it. |
-| `scripts/verify` | `check`, then the slower tests in `tests/verify_only/`: the leak search, and live hook tests that spend a few cents on real sessions. `DW_SKIP_LIVE=1` skips those, visibly. |
+| `scripts/verify` | `check`, then the slower tests in `tests/verify_only/`: the leak search, live hook tests that spend a few cents on real sessions, and setup run end to end on the apps in `tests/fixtures/`, with their database tests in Docker. `DW_SKIP_LIVE=1` and `DW_SKIP_FIXTURES=1` skip those two, visibly. |
 | `sh tests/<name>.test.sh` | One test. |
 
 ## Layout
@@ -32,7 +32,7 @@ Tools needed: `git`, `gh`, `jq`, `uvx` and `claude` (Claude Code 2.1.295 or late
 | `.claude/dev-workflow.json` | Facts about this repo for the plugin's hooks |
 | `.githooks/` | This repo's git hooks: copies of the plugin's templates, plus their settings in `dev-workflow.env` |
 | `scripts/` | `check` and `verify` |
-| `tests/` | Tests, with helpers in `tests/lib/`. They never ship in a plugin. |
+| `tests/` | Tests, with helpers in `tests/lib/`, and in `tests/fixtures/` the two small apps setup is tested on, each with its answers file. They never ship in a plugin. |
 | `docs/superpowers/specs/`, `docs/superpowers/plans/` | Approved specs and plans |
 | `docs/decisions.md`, `docs/maintenance.md` | The decision log and the maintenance record |
 | `docs/hook-behaviour.md` | What the plugin's hooks were seen to do in real sessions, from the live tests |

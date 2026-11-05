@@ -12,7 +12,9 @@
 
 ## Delivery
 
-One issue, one branch and one squash-merged pull request per part, merged in order and not stacked. Each commit subject carries that part's issue number.
+One issue, one branch and one squash-merged pull request per part, merged in order and not stacked.
+
+From part 3 on (owner, 2026-11-05): a fresh implementer per task, never resumed, and no per-task review. One independent review per part before merging. Fix rounds only for problems in ordinary use, with edge cases listed in the ledger. Each commit subject carries that part's issue number.
 
 | Part | Issue | Branch | Tasks |
 |---|---|---|---|
@@ -372,10 +374,10 @@ Gate table: no project file and no `jq` on `PATH` gives `none`. Project file and
 - [ ] **Step 5: Run the tests.** Expected: pass.
 - [ ] **Step 6: Commit:** `feat(setup): add the setup entry point and skill (#4)`.
 
-### Task 14: The four test setups
+### Task 14: The two test setups
 
 **Files:**
-- Create: `tests/fixtures/{next-supabase,astro-static,litestar-postgres,rust-ui}/`, `tests/verify_only/fixtures.test.sh`, plus answers files per fixture
+- Create: `tests/fixtures/{next-supabase,litestar-postgres}/` (two setups since 2026-11-05; see the spec), `tests/verify_only/fixtures.test.sh`, plus answers files per fixture
 
 **Interfaces:**
 - Consumes: `run.sh`.

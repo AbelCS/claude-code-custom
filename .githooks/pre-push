@@ -11,6 +11,10 @@ fi
 # shellcheck source-path=SCRIPTDIR source=dw-lib.sh
 . "$hook_dir/dw-lib.sh"
 
+# Read once, for a pre-push.local to get too.
+refs=$(cat)
+if [ -n "$refs" ]; then printf '%s\n' "$refs"; fi | dw_run_local pre-push "$@" || exit
+
 blocked=0
 block() {
   printf 'pre-push: %s\n' "$*" >&2
@@ -30,7 +34,6 @@ if [ -z "${DW_DEFAULT_BRANCH:-}" ] || [ -z "${DW_CHECK+set}" ]; then
   env_broken
 fi
 
-refs=$(cat)
 head=$(git rev-parse -q --verify 'HEAD^{commit}')
 
 to_default=0

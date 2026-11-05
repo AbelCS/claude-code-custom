@@ -41,13 +41,13 @@ The same setup is also available as an auto-activating skill — Claude will off
 
 ### dev-workflow
 
-Run inside any project where you want issue-driven development enabled:
+Run inside any project to set it up with the methodology, or to upgrade an earlier setup:
 
 ```text
-/dev-workflow:enable-github-issues
+/dev-workflow:setup
 ```
 
-This writes a "GitHub Issue-Driven Workflow" section into the project's `AGENTS.md` (migrating any existing `CLAUDE.md` content first, and replacing `CLAUDE.md` with a pointer). After that, when you paste a GitHub issue link from the project's repo, Claude will read the issue, branch, work, push, and open a PR that closes the issue.
+It looks at the repo, checks the tools and plugins it relies on, asks what it can't tell one question at a time, and shows every file it would create or update. Nothing is written until you agree. It writes `AGENTS.md` with sections it keeps up to date, a `CLAUDE.md` that imports it, the git hooks, `.claude/dev-workflow.json` and the attribution settings. Text you edited is kept, and shown as a difference. It replaces `/dev-workflow:enable-github-issues`.
 
 To enable automated, conventional-commit-driven releases via [release-please](https://github.com/googleapis/release-please):
 
@@ -75,9 +75,12 @@ This detects the project type (node, python, rust, …), creates `release-please
     └── dev-workflow/
         ├── .claude-plugin/
         │   └── plugin.json
-        └── commands/
-            ├── enable-github-issues.md  # /dev-workflow:enable-github-issues
-            └── enable-releases.md       # /dev-workflow:enable-releases
+        ├── commands/
+        │   └── enable-releases.md       # /dev-workflow:enable-releases
+        ├── hooks/                       # Claude Code hooks
+        ├── scripts/                     # The hooks' scripts and setup's mechanical work
+        └── skills/
+            └── setup/                   # /dev-workflow:setup
 ```
 
 ## License

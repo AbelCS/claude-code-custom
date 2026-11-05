@@ -100,33 +100,8 @@ check_git_hooks() {
 
 # --- The project file against the plugin
 
-# Sets version_parts to the three numbers of a version, ignoring a pre-release or build
-# part, with missing numbers as 0. Returns 1 if it isn't a version, which includes numbers
-# too long for the shell to compare.
-read_version() {
-  rv_numbers=${1%%[-+]*}
-  case $rv_numbers in
-    '' | .* | *. | *..* | *[!0-9.]* | *[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]*) return 1 ;;
-  esac
-  rv_ifs=$IFS
-  IFS=.
-  # shellcheck disable=SC2086 # Split on the dots.
-  set -- $rv_numbers 0 0
-  IFS=$rv_ifs
-  version_parts="$1 $2 $3"
-}
-
-# version_is_older <a> <b>: both already through read_version, as "1 2 3".
-version_is_older() {
-  # shellcheck disable=SC2086 # Three numbers.
-  set -- $1 $2
-  # By test rather than arithmetic, which would read a leading zero as octal.
-  [ "$1" -lt "$4" ] && return 0
-  [ "$1" -gt "$4" ] && return 1
-  [ "$2" -lt "$5" ] && return 0
-  [ "$2" -gt "$5" ] && return 1
-  [ "$3" -lt "$6" ]
-}
+# shellcheck source=plugins/dev-workflow/scripts/lib/version.sh
+. "$scripts_dir/lib/version.sh"
 
 check_plugin_version() {
   plugin_version=$(jq -r '.version | strings' "$scripts_dir/../.claude-plugin/plugin.json" 2>/dev/null)
@@ -167,24 +142,23 @@ check_plugins() {
   if [ -e "$registry" ]; then
     # A plugin installed for a project is only there for that project.
     if ! _dw_is_one_object "$registry" ||
-      ! installed_plugins=$(jq -re --arg here "$DW_PROJECT_DIR" --arg main "$(main_checkout)" '
-        .plugins | to_entries | map(
-          select(.value | any(
-            (.scope != "project" and .scope != "local")
-            or .projectPath == $here or .projectPath == $main))
-          | .key | split("@")[0]) | join("\n")' "$registry" 2>/dev/null); then
+      ! installed_plugins=$(jq -re -L "$scripts_dir/lib" --arg here "$DW_PROJECT_DIR" --arg main "$(main_checkout)" \
+        'include "installed-plugins"; installed_for($here; $main) | map(.name) | join("\n")' "$registry" 2>/dev/null); then
       say "couldn't read installed_plugins.json, so the plugins this project relies on weren't checked."
       return 0
     fi
   fi
 
-  official='claude plugin install'
-  need_plugin superpowers "$official superpowers@claude-plugins-official"
-  need_plugin context7 "$official context7@claude-plugins-official"
-  need_plugin serena "$official serena@claude-plugins-official"
-  [ "$(dw_project '.hasScreens == true' 2>/dev/null)" = true ] || return 0
-  need_plugin intent "claude plugin marketplace add ghaida/intent, then $official intent@intent"
-  need_plugin ui-ux-pro-max "claude plugin marketplace add nextlevelbuilder/ui-ux-pro-max-skill, then $official ui-ux-pro-max@ui-ux-pro-max-skill"
+  has_screens=$(dw_project '.hasScreens == true' 2>/dev/null)
+  # The list is shared with setup's tools check.
+  [ -r "$scripts_dir/lib/plugins.txt" ] || return 0
+  while read -r p_name p_when p_marketplace p_id; do
+    case $p_name in '' | '#'*) continue ;; esac
+    [ "$p_when" = always ] || [ "$has_screens" = true ] || continue
+    p_install="claude plugin install $p_id"
+    [ "$p_marketplace" = - ] || p_install="claude plugin marketplace add $p_marketplace, then $p_install"
+    need_plugin "$p_name" "$p_install"
+  done <"$scripts_dir/lib/plugins.txt"
 }
 
 # --- Maintenance

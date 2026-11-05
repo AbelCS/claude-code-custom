@@ -10,6 +10,7 @@ if [ ! -r "$hook_dir/dw-lib.sh" ]; then
 fi
 # shellcheck source-path=SCRIPTDIR source=dw-lib.sh
 . "$hook_dir/dw-lib.sh"
+dw_run_local pre-commit || exit
 
 blocked=0
 block() {
