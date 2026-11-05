@@ -2,11 +2,12 @@
 # assemble_agents <work> <fresh> <project-template>: prints the new AGENTS.md from
 # the pieces agents-split.awk wrote to <work>/p and the marks agents-md.sh left:
 #   drop.<n>     the piece is left out
-#   replace.<n>  the piece, a section's body, becomes the template file named inside
+#   replace.<n>  the piece, a section's body, becomes the template file named inside,
+#                as section prints it
 #   insert.<n>   sections to add before piece n; insert.end, at the end
 # A fresh file starts with the project template. Inserted sections get a blank line
 # before and after them; every other byte is the piece's own. Source this file after
-# agents-md.sh's newline and eol; don't run it.
+# agents-md.sh's newline, eol and section; don't run it.
 
 _assemble_ends_blank() { [ -s "$1" ] && [ -z "$(tail -n 1 "$1" | tr -d '\r')" ]; }
 _assemble_starts_blank() { [ -s "$1" ] && [ -z "$(head -n 1 "$1" | tr -d '\r')" ]; }
@@ -30,7 +31,7 @@ assemble_agents() {
     _assemble_piece=$1/p/$_assemble_n
     [ ! -f "$1/drop.$_assemble_n" ] || continue
     if [ -f "$1/replace.$_assemble_n" ]; then
-      eol <"$(cat "$1/replace.$_assemble_n")" >>"$_assemble_out"
+      section "$(cat "$1/replace.$_assemble_n")" >>"$_assemble_out"
       _assemble_gap=false
     elif [ -s "$_assemble_piece" ]; then
       # Text right after inserted sections gets a blank line before it.

@@ -41,6 +41,18 @@ out=$(run apply "$r")
 assert_exit 0 test "$(action "$out" CLAUDE.md)" = keep
 assert_file_same "$r/CLAUDE.md" "$work/import"
 
+# --- an import example inside a code fence moves with the text, and isn't removed
+
+r=$work/fenced
+mkdir -p "$r"
+# shellcheck disable=SC2016 # Backticks are the fence, not a command.
+printf '# Notes\n\nCLAUDE.md holds just this:\n\n```md\n@AGENTS.md\n```\n\n~~~\n@AGENTS.md\n~~~\n@AGENTS.md\n' >"$r/CLAUDE.md"
+run apply "$r" >/dev/null
+assert_file_same "$r/CLAUDE.md" "$work/import"
+# shellcheck disable=SC2016 # Backticks are the fence, not a command.
+printf '# Notes\n\nCLAUDE.md holds just this:\n\n```md\n@AGENTS.md\n```\n\n~~~\n@AGENTS.md\n~~~\n' >"$work/fenced-expected"
+assert_file_same "$r/AGENTS.md" "$work/fenced-expected"
+
 # --- an old pointer becomes the import
 
 r=$work/pointer

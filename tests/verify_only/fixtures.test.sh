@@ -5,7 +5,9 @@
 # CLAUDE.md is the import and AGENTS.md has every managed section, any old block is gone,
 # a bad commit and a badly formatted file are rejected and a good commit passes, pre-push
 # runs the app's real check, which passes, and fails when a test does, a second apply
-# changes nothing, and project edits survive a rerun. Each app also runs its database test
+# changes nothing, and project edits survive a rerun. For Next.js, which has Prettier,
+# setup's output passes prettier --check, and a rerun after Prettier rewrites it keeps
+# everything. Each app also runs its database test
 # against a database of its own in Docker: row-level security for Next.js with Supabase,
 # and the data-access layer for Litestar with Postgres.
 #
@@ -38,6 +40,11 @@ done
 docker info >/dev/null 2>&1 || _assert_fail "fixtures: Docker isn't running: start it, $SKIP_HINT"
 
 work=$(tmp_dir)
+# A hooks path or anything else in this machine's git config must not change a result.
+GIT_CONFIG_GLOBAL=$work/gitconfig
+GIT_CONFIG_NOSYSTEM=1
+: >"$GIT_CONFIG_GLOBAL"
+export GIT_CONFIG_GLOBAL GIT_CONFIG_NOSYSTEM
 export NEXT_TELEMETRY_DISABLED=1 UV_NO_PROGRESS=1 npm_config_fund=false npm_config_audit=false
 
 # --- stubs: gh signed in, Claude Code new enough, no plugins installed
@@ -217,6 +224,24 @@ edits() {
   assert_contains "$(cat "$1/.githooks/pre-commit")" '# Our own line.'
 }
 
+# prettier_stable <repo> <answers>: setup's output passes the app's own Prettier as it
+# is. Then, with a managed section's formatting changed, as a person might, and
+# Prettier run over it all, a rerun sees no edits: it reports keep, not conflict.
+prettier_stable() {
+  _files='AGENTS.md CLAUDE.md docs/decisions.md docs/maintenance.md .claude/dev-workflow.json .claude/settings.json package.json'
+  # shellcheck disable=SC2086 # Plain names, split on purpose.
+  _out=$(cd "$1" && npx prettier --check $_files 2>&1) || _assert_fail "setup's output fails prettier --check:
+$_out"
+  awk '/^<!-- dev-workflow:begin tools -->$/ { inside = 1 } inside && /^- / { sub(/^- /, "* ") }
+    inside && /^## / { print; print ""; print ""; next } /^<!-- dev-workflow:end tools -->$/ { inside = 0 }
+    { print }' "$1/AGENTS.md" >"$work/agents" && cat "$work/agents" >"$1/AGENTS.md"
+  # shellcheck disable=SC2086
+  _out=$(cd "$1" && npx prettier --write $_files 2>&1) || _assert_fail "prettier --write failed:
+$_out"
+  _again=$(apply "$1" "$2")
+  assert_exit 0 test "$(actions "$_again")" = keep
+}
+
 # no_docker <repo>: the app's database test, with Docker not running, says so.
 no_docker() {
   mkdir -p "$work/no-docker"
@@ -316,6 +341,7 @@ $(cat "$work/npm.out")"
     assert_file_same "$r/$f" "$work/$(basename "$f").before"
   done
   assert_contains "$(cat "$r/.githooks/dev-workflow.env")" .github/workflows/release-please.yml
+  prettier_stable "$r" "$answers"
   commits "$r" lib/bad.js "$bad_js"
   rerun "$r" "$answers"
   push "$r" 'All matched files use Prettier code style!' lib/notes.js 's/"Untitled"/"Unnamed"/'
@@ -347,6 +373,7 @@ $(cat "$work/verify.out")"
     assert_exit 0 test "$(printf '%s\n' "$applied" | jq -r --arg p "$p" 'select(.path == $p) | .action')" = create
   done
   check_setup "$r"
+  prettier_stable "$r" "$answers"
   commits "$r" lib/bad.js "$bad_js"
   rerun "$r" "$answers"
   push "$r" 'All matched files use Prettier code style!' lib/notes.js 's/"Untitled"/"Unnamed"/'

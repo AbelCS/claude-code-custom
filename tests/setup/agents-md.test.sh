@@ -6,6 +6,8 @@
 ROOT=$(cd "$(dirname "$0")/../.." && pwd)
 # shellcheck source=tests/lib/assert.sh
 . "$ROOT/tests/lib/assert.sh"
+# shellcheck source=tests/lib/markdown.sh
+. "$ROOT/tests/lib/markdown.sh"
 
 AGENTS_MD="$ROOT/plugins/dev-workflow/scripts/setup/agents-md.sh"
 TEMPLATES="$ROOT/plugins/dev-workflow/skills/setup/templates/agents"
@@ -48,9 +50,7 @@ ledger_of() { # <root> <section>
 }
 
 text_hash() { # <file>: the fingerprint of its text with the comparison rule applied
-# shellcheck disable=SC2016 # Expanded by the inner shell.
-  LEGACY_DIR=$LEGACY sh -c '. "$1/plugins/dev-workflow/scripts/setup/legacy.sh"
-    legacy_normalise <"$2" | git hash-object --no-filters --stdin' sh "$ROOT" "$1"
+  awk -f "$ROOT/plugins/dev-workflow/scripts/setup/agents-normalise.awk" "$1" | git hash-object --no-filters --stdin
 }
 
 outside() { # <file>: its lines outside managed sections, markers included
@@ -97,12 +97,16 @@ printf '%s\n' '# Project' '## Stack' '## Commands' '## Glossary' '## Code organi
   '## Decisions' '## Workflow' '## Testing' '## Tools' '## Models' '## Communication' >"$work/expected"
 assert_file_same "$work/headings" "$work/expected"
 
+# In the form Prettier keeps, so a project checking its files with it passes.
+assert_markdown_form "$r/AGENTS.md"
 for s in $SECTIONS; do
-  # Each section sits between its markers, as its template's text.
+  # Each section sits between its markers, as its template's text, with a blank line
+  # either side, as Prettier puts between blocks.
   awk -v s="$s" '$0 == "<!-- dev-workflow:end " s " -->" { inside = 0 }
     inside { print } $0 == "<!-- dev-workflow:begin " s " -->" { inside = 1 }' \
     "$r/AGENTS.md" >"$work/body"
-  assert_file_same "$work/body" "$TEMPLATES/$s.md"
+  { echo && cat "$TEMPLATES/$s.md" && echo; } >"$work/expected-body"
+  assert_file_same "$work/body" "$work/expected-body"
   assert_exit 0 test "$(ledger_of "$r" "$s")" = "$(text_hash "$TEMPLATES/$s.md")"
 done
 # The project part is the template, untouched and outside any markers.
@@ -126,6 +130,44 @@ out=$(md apply "$r")
 assert_actions "$out" "$(all_actions keep)"
 assert_unchanged "$r" first
 
+# Formatting alone isn't an edit: another list marker, table padding, and blank lines
+# added or taken away, as Prettier or a person might change them.
+ft="$work/templates-table"
+cp -R "$TEMPLATES" "$ft"
+printf '\n| Key | What        |\n| --- | ----------- |\n| a   | the first   |\n| b   | the second  |\n' >>"$ft/models.md"
+fr="$work/formatted"
+mkdir -p "$fr"
+md apply "$fr" "$ft" >/dev/null
+assert_markdown_form "$fr/AGENTS.md"
+awk '
+  /^<!-- dev-workflow:begin / { print; inside = 1; skip_blank = 1; next }
+  /^<!-- dev-workflow:end / { inside = 0 }
+  inside && skip_blank && $0 == "" { skip_blank = 0; next }
+  inside && /^- / { sub(/^- /, "*   ") }
+  inside && /^\| / { gsub(/ +\|/, "|"); gsub(/\| +/, "|"); if (/^[-|]+$/) gsub(/-+/, "--") }
+  inside && /^## / { print; print ""; print ""; next }
+  { print }
+' "$fr/AGENTS.md" >"$work/formatted.md"
+assert_contains "$(cat "$work/formatted.md")" '*   Always tell the owner'
+assert_contains "$(cat "$work/formatted.md")" '|a|the first|'
+cp "$work/formatted.md" "$fr/AGENTS.md"
+snapshot "$fr" formatted
+out=$(md apply "$fr" "$ft")
+assert_actions "$out" "$(all_actions keep)"
+assert_unchanged "$fr" formatted
+# Then, with a newer template, each is updated as one setup wrote.
+printf -- '- One more rule.\n' >>"$ft/communication.md"
+out=$(md apply "$fr" "$ft")
+assert_exit 0 test "$(action "$out" communication)" = update
+assert_exit 0 test "$(action "$out" models)" = keep
+assert_contains "$(cat "$fr/AGENTS.md")" '- One more rule.'
+# A real edit still counts.
+sed 's/the second/the other/' "$fr/AGENTS.md" >"$work/formatted.md" && cp "$work/formatted.md" "$fr/AGENTS.md"
+printf -- '- A newer models rule.\n' >>"$ft/models.md"
+out=$(md apply "$fr" "$ft")
+assert_exit 0 test "$(action "$out" models)" = conflict
+assert_contains "$(field "$out" models diff)" '+|b|the other|'
+
 # Filling in the project's prompts is the project's business.
 cp "$work/filled" "$r/AGENTS.md"
 snapshot "$r" filled
@@ -148,7 +190,9 @@ outside "$r/AGENTS.md" >"$work/outside-before"
 out=$(md apply "$r" "$t")
 assert_actions "$out" "project:keep decisions:keep workflow:update testing:keep tools:keep models:keep communication:keep"
 assert_contains "$(cat "$r/AGENTS.md")" "- A rule added in a newer version.
+
 <!-- dev-workflow:end workflow -->"
+assert_markdown_form "$r/AGENTS.md"
 assert_exit 0 test "$(ledger_of "$r" workflow)" = "$(text_hash "$t/workflow.md")"
 # Text outside the markers is byte for byte the same, and the mode is kept.
 outside "$r/AGENTS.md" >"$work/outside-after"

@@ -8,20 +8,24 @@
 # Changes nothing. Exits 2 on bad usage or a missing tool.
 #
 # The fields:
-#   repo          "empty" (no commits and no files) or "existing"
-#   git           whether the path is in a git work tree
-#   remote        "github" if origin's host is github.com, "other", or "none"
-#   defaultBranch origin/HEAD's branch, else the current branch if there is no
-#                 remote, else "main"
-#   stackHints    stack files that apply: node-tooling, nextjs, astro, supabase
-#   languages     other languages found: python, rust, go and so on
-#   hookTool      "husky", "lefthook", "pre-commit", "simple-git-hooks" or "none"
-#   hooksPath     the repo's own core.hooksPath, or null
-#   agents        whether AGENTS.md exists
-#   claude        CLAUDE.md is "absent", a "symlink", the "import" @AGENTS.md, an
-#                 old "pointer", or "content"
-#   legacyBlocks  old blocks in either file: web-5, web-6, issues
-#   projectFile   whether .claude/dev-workflow.json exists
+#   repo            "empty" (no commits and no files) or "existing"
+#   git             whether the path is in a git work tree
+#   remote          "github" if origin's host is github.com, "other", or "none"
+#   defaultBranch   origin/HEAD's branch, else the current branch if there is no
+#                   remote, else "main"
+#   stackHints      stack files that apply: node-tooling, nextjs, astro, supabase
+#   languages       other languages found: python, rust, go and so on
+#   hookTool        "husky", "lefthook", "pre-commit", "simple-git-hooks" or "none"
+#   hooksPath       the core.hooksPath git uses here, from any config, or null
+#   hooksPathScope  where that's set: "local", "worktree", "global", "system" or
+#                   "command", which is git's command line or environment, or null
+#   gitHooks        the executable hooks in .git/hooks, by name, git's samples left
+#                   out. Git runs them only while no hooks path is in effect
+#   agents          whether AGENTS.md exists
+#   claude          CLAUDE.md is "absent", a "symlink", the "import" @AGENTS.md, an
+#                   old "pointer", or "content"
+#   legacyBlocks    old blocks in either file: web-5, web-6, issues
+#   projectFile     whether .claude/dev-workflow.json exists
 
 die() {
   printf 'detect.sh: %s\n' "$*" >&2
@@ -72,51 +76,12 @@ else
   done
 fi
 
-# --- remote and default branch
+# --- remote, default branch and hooks
 
-# remote_kind <url>: github only when the host really is github.com.
-remote_kind() {
-  _url=$(printf '%s' "$1" | LC_ALL=C tr '[:upper:]' '[:lower:]')
-  case $_url in
-    *://*)
-      case ${_url%%://*} in
-        http | https | ssh | git | git+ssh | ssh+git) ;;
-        *) echo other && return ;;
-      esac
-      _host=${_url#*://}
-      _host=${_host%%[/?#\\]*}
-      _host=${_host##*@}
-      _host=${_host%%:*}
-      ;;
-    *:*)
-      # The scp form, host:path. A slash before the colon makes it a local path.
-      _host=${_url%%:*}
-      case $_host in */*) echo other && return ;; esac
-      _host=${_host##*@}
-      ;;
-    *) echo other && return ;;
-  esac
-  if [ "$_host" = github.com ]; then echo github; else echo other; fi
-}
-
-remote=none
-default_branch=main
-hooks_path=
-if [ "$git" = true ]; then
-  if url=$(git -C "$root" remote get-url origin 2>/dev/null); then
-    remote=$(remote_kind "$url")
-  elif [ -n "$(git -C "$root" remote 2>/dev/null)" ]; then
-    remote=other
-  fi
-
-  if ref=$(git -C "$root" symbolic-ref -q refs/remotes/origin/HEAD 2>/dev/null); then
-    default_branch=${ref#refs/remotes/origin/}
-  elif [ "$remote" = none ] && ref=$(git -C "$root" symbolic-ref -q HEAD 2>/dev/null); then
-    default_branch=${ref#refs/heads/}
-  fi
-
-  hooks_path=$(git -C "$root" config --local --get core.hooksPath 2>/dev/null)
-fi
+# shellcheck source=plugins/dev-workflow/scripts/setup/detect-git.sh
+. "$(dirname -- "$0")/detect-git.sh"
+remote=none default_branch=main hooks_path='' hooks_scope='' git_hooks=''
+[ "$git" = false ] || detect_git "$root"
 
 # --- stack hints and languages, at the root and one folder down
 
@@ -169,27 +134,7 @@ stack_hints=
 
 # --- hook tool, at the root only
 
-hook_tool=none
-lefthook_configs=
-for name in lefthook .lefthook .config/lefthook; do
-  for ext in yml yaml toml json jsonc; do
-    lefthook_configs="$lefthook_configs $name.$ext"
-  done
-done
-# shellcheck disable=SC2086 # Plain names, split on purpose.
-set -- $lefthook_configs
-if [ -d "$root/.husky" ]; then
-  hook_tool=husky
-elif (cd "$root" && exists "$@"); then
-  hook_tool=lefthook
-elif exists "$root/.pre-commit-config.yaml"; then
-  hook_tool=pre-commit
-elif [ -f "$root/package.json" ] && jq -e '
-  objects | has("simple-git-hooks")
-    or ([.dependencies, .devDependencies] | map(objects | has("simple-git-hooks")) | any)
-' "$root/package.json" >/dev/null 2>&1; then
-  hook_tool=simple-git-hooks
-fi
+detect_hook_tool "$root"
 
 # --- AGENTS.md, CLAUDE.md and the old blocks in them
 
@@ -226,6 +171,8 @@ jq -n \
   --argjson languages "$(list "$languages" | jq -c 'unique')" \
   --arg hookTool "$hook_tool" \
   --arg hooksPath "$hooks_path" \
+  --arg hooksPathScope "$hooks_scope" \
+  --argjson gitHooks "$(list "$git_hooks")" \
   --argjson agents "$agents" \
   --arg claude "$claude" \
   --argjson found "$(list "$blocks")" \
@@ -238,7 +185,9 @@ jq -n \
     stackHints: $stackHints,
     languages: $languages,
     hookTool: $hookTool,
-    hooksPath: (if $hooksPath == "" then null else $hooksPath end),
+    hooksPath: (if $hooksPathScope == "" then null else $hooksPath end),
+    hooksPathScope: (if $hooksPathScope == "" then null else $hooksPathScope end),
+    gitHooks: $gitHooks,
     agents: $agents,
     claude: $claude,
     legacyBlocks: (["web-5", "web-6", "issues"] | map(select(. as $id | $found | index($id)))),

@@ -1,5 +1,5 @@
 #!/bin/sh
-# Usage: install-hooks.sh plan|apply <root> <templates-dir>
+# Usage: install-hooks.sh plan|apply <root> <templates-dir> [--move-git-hooks]
 #
 # Copies the git hooks in <templates-dir> (skills/setup/templates/githooks) into
 # <root>/.githooks/, and turns them on. Prints one JSON line per file or setting:
@@ -17,7 +17,9 @@
 # that isn't. A hook that only lost that mode is "update". dev-workflow.env, which
 # the hooks read, is project-file.sh's.
 #
-# How the hooks are turned on is in hook-activate.sh. A folder it writes in that
+# How the hooks are turned on is in hook-activate.sh. --move-git-hooks is the person's
+# yes to moving the executable hooks in .git/hooks into .githooks, which turning the
+# hooks on would otherwise stop: hook-move.sh. A folder it writes in that
 # leads out of the project through a symlink, .githooks, .claude or .husky, is an
 # error before anything is read or written.
 
@@ -32,8 +34,13 @@ die() {
 for tool in git jq awk diff; do
   command -v "$tool" >/dev/null 2>&1 || die "missing required tool: $tool"
 done
-usage="usage: install-hooks.sh plan|apply <root> <templates-dir>"
-[ "$#" -eq 3 ] || die "$usage"
+usage="usage: install-hooks.sh plan|apply <root> <templates-dir> [--move-git-hooks]"
+MOVE_GIT_HOOKS=
+case $#:${4:-} in
+  3:) ;;
+  4:--move-git-hooks) MOVE_GIT_HOOKS=true ;;
+  *) die "$usage" ;;
+esac
 case $1 in plan | apply) ;; *) die "$usage" ;; esac
 mode=$1
 root=$2
@@ -63,7 +70,7 @@ trap 'exit 130' INT
 trap 'exit 143' TERM
 # What apply does, one step a line, its words split by tabs, as paths can hold
 # spaces: "write <target> <source> <0|1 executable>", "chmod <target>",
-# "ledger <key> <hash>" or "hooks-path".
+# "move <from> <to>", "ledger <key> <hash>" or "hooks-path".
 : >"$work/steps"
 tab=$(printf '\t')
 step() { # <words...>: adds a step
@@ -140,6 +147,7 @@ while IFS=$tab read -r kind a b c; do
       [ "$c" = 0 ] || chmod +x "$a" || die "cannot make executable: $a"
       ;;
     chmod) chmod +x "$a" || die "cannot make executable: $a" ;;
+    move) mv -- "$a" "$b" || die "cannot move $a to: $b" ;;
     ledger) sh "$here/ledger.sh" set "$pf" "$a" "$b" || exit 2 ;;
     hooks-path) git -C "$root" config --local core.hooksPath .githooks || die "cannot set core.hooksPath in: $root" ;;
   esac

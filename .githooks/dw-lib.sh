@@ -219,6 +219,21 @@ dw_ci_triggers() {
   printf '%s\n' "$1" | LC_ALL=C awk "$_dw_ci_trigger_program"
 }
 
+# dw_run_local <hook> [args...]: runs <hook>.local next to the running hook, if it's
+# there, with the same arguments and stdin: a hook setup moved here from .git/hooks,
+# which runs first. Returns its status, for the hook to stop on. One that isn't
+# executable is skipped, as git would skip it, with a word.
+dw_run_local() {
+  _dw_local="$(dirname "$0")/$1.local"
+  shift
+  [ -e "$_dw_local" ] || return 0
+  if [ ! -x "$_dw_local" ]; then
+    printf "dev-workflow: %s isn't executable, so it was skipped\n" "$_dw_local" >&2
+    return 0
+  fi
+  "$_dw_local" "$@"
+}
+
 # dw_load_env: sources dev-workflow.env next to the running hook. Prints why and
 # returns 1 if it's missing or broken. It returns rather than exits so that each hook
 # decides what that means for it.

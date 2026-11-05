@@ -5,6 +5,8 @@
 ROOT=$(cd "$(dirname "$0")/../.." && pwd)
 # shellcheck source=tests/lib/assert.sh
 . "$ROOT/tests/lib/assert.sh"
+# shellcheck source=tests/lib/markdown.sh
+. "$ROOT/tests/lib/markdown.sh"
 
 TEMPLATES="$ROOT/plugins/dev-workflow/skills/setup/templates/agents"
 
@@ -31,6 +33,12 @@ assert_exit 1 grep -Eq 'dev-workflow:(begin|end)' "$project"
 
 # Exactly the expected files: a stray one would never be written.
 assert_exit 0 test "$(find "$TEMPLATES" -type f | wc -l)" -eq 7
+
+# --- in the form Prettier keeps, so setup's output passes a project's Prettier check
+
+for file in "$TEMPLATES"/*.md "$TEMPLATES"/../docs/*.md; do
+  assert_markdown_form "$file"
+done
 
 # --- no model, stack or framework names
 

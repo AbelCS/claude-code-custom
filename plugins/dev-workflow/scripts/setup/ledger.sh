@@ -11,7 +11,7 @@
 #   hash  prints git's blob hash of the file, without any filters
 #   get   prints the key's fingerprint; exits 1 if there is none, or no file yet
 #   set   records it, creating the file and its folder if needed, and keeping every
-#         other field and the file's mode
+#         other field, the file's mode and its indent, in the form Prettier prints
 #
 # Exits 2 on bad usage, a file that can't be read, a project file that's a symlink,
 # which is never read or written through, or one that isn't a JSON object with an
@@ -47,16 +47,22 @@ case "${1:-}:$#" in
     jq -re --arg k "$3" '.managed[$k] // empty | strings' "$2" || exit 1
     ;;
   set:4)
+    here=$(dirname -- "$0")
     # shellcheck source=plugins/dev-workflow/scripts/setup/atomic.sh
-    . "$(dirname -- "$0")/atomic.sh"
+    . "$here/atomic.sh"
+    # shellcheck source=plugins/dev-workflow/scripts/setup/json.sh
+    . "$here/json.sh"
+    indent=
     if [ -e "$2" ]; then
       valid "$2"
       current=$(cat -- "$2") || die "cannot read: $2"
+      indent=$(json_indent "$2")
     else
       mkdir -p -- "$(dirname -- "$2")" || die "cannot create the folder for: $2"
       current='{}'
     fi
-    updated=$(printf '%s\n' "$current" | jq --arg k "$3" --arg h "$4" '.managed[$k] = $h') ||
+    value=$(printf '%s\n' "$current" | jq -c --arg k "$3" --arg h "$4" '.managed[$k] = $h') &&
+      updated=$(printf '%s\n' "$value" | json_format "$indent") && [ -n "$updated" ] ||
       die "cannot update: $2"
     printf '%s\n' "$updated" | atomic_write "$2" || exit 2
     ;;

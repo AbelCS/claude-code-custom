@@ -18,9 +18,9 @@
 #            file holding the import, moving nothing. Any other, in the repo or out,
 #            dangling or a chain of links, is a conflict, printed as one line for
 #            CLAUDE.md with exit 1, and left for the person to resolve by hand.
-# Lines that are just @AGENTS.md don't move, nor do blank lines at either end. Text
-# AGENTS.md already ends with isn't added again, so a rerun after a failure between
-# the two writes doesn't repeat it.
+# Lines that are just @AGENTS.md don't move, except in a code fence, where they're an
+# example, nor do blank lines at either end. Text AGENTS.md already ends with isn't
+# added again, so a rerun after a failure between the two writes doesn't repeat it.
 # Old rule blocks that move are left for agents-md.sh, which must run after this.
 
 die() {
@@ -91,10 +91,12 @@ case $state in
     ;;
   content)
     if [ -e "$claude" ]; then
-      # The lines that move: not the import, and no blank lines at either end.
+      # The lines that move: not the import, unless it's an example in a code
+      # fence, and no blank lines at either end.
       awk '
         { line = $0; sub(/[ \t\r\f\v]+$/, "", line) }
-        line == "@AGENTS.md" { next }
+        line ~ /^ ? ? ?(```|~~~)/ { fence = !fence }
+        !fence && line == "@AGENTS.md" { next }
         { lines[++n] = $0 }
         line != "" { if (!first) first = n; last = n }
         END { if (first) for (i = first; i <= last; i++) print lines[i] }

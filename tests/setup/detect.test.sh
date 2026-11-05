@@ -50,8 +50,8 @@ block() { # <version>: a whole published web block
 r=$(tmp_dir)/repo
 new_repo "$r"
 commit "$r"
-assert_field "$r" 'keys' '["agents","claude","defaultBranch","git","hookTool","hooksPath","languages","legacyBlocks","projectFile","remote","repo","stackHints"]'
-assert_field "$r" '[.repo, .git, .remote, .defaultBranch, .hookTool, .hooksPath, .agents, .claude, .projectFile]' '["existing",true,"none","main","none",null,false,"absent",false]'
+assert_field "$r" 'keys' '["agents","claude","defaultBranch","git","gitHooks","hookTool","hooksPath","hooksPathScope","languages","legacyBlocks","projectFile","remote","repo","stackHints"]'
+assert_field "$r" '[.repo, .git, .remote, .defaultBranch, .hookTool, .hooksPath, .hooksPathScope, .gitHooks, .agents, .claude, .projectFile]' '["existing",true,"none","main","none",null,null,[],false,"absent",false]'
 assert_field "$r" '[.stackHints, .languages, .legacyBlocks]' '[[],[],[]]'
 
 # --- repo and git
@@ -66,7 +66,7 @@ touch "$r/README.md"
 assert_field "$r" '.repo' '"existing"'
 
 r=$(tmp_dir)
-assert_field "$r" '[.repo, .git, .remote, .defaultBranch, .hooksPath]' '["empty",false,"none","main",null]'
+assert_field "$r" '[.repo, .git, .remote, .defaultBranch, .hooksPath, .hooksPathScope, .gitHooks]' '["empty",false,"none","main",null,null,[]]'
 touch "$r/notes.txt"
 assert_field "$r" '[.repo, .git]' '["existing",false]'
 
@@ -219,12 +219,40 @@ mkdir "$r/.husky"
 assert_field "$r" '.hookTool' '"husky"'
 
 git -C "$r" config core.hooksPath '.husky/_'
-assert_field "$r" '.hooksPath' '".husky/_"'
-# Only the project's own value: a global one isn't the project's.
+assert_field "$r" '[.hooksPath, .hooksPathScope]' '[".husky/_","local"]'
+# The value git uses, from wherever it comes: a global one stops .git/hooks running too.
 git -C "$r" config --unset core.hooksPath
 git config --file "$GIT_CONFIG_GLOBAL" core.hooksPath /global/hooks
-assert_field "$r" '.hooksPath' 'null'
+assert_field "$r" '[.hooksPath, .hooksPathScope]' '["/global/hooks","global"]'
+# The repo's own wins over it, as in git.
+git -C "$r" config core.hooksPath .githooks
+assert_field "$r" '[.hooksPath, .hooksPathScope]' '[".githooks","local"]'
+git -C "$r" config --unset core.hooksPath
 : >"$GIT_CONFIG_GLOBAL"
+assert_field "$r" '[.hooksPath, .hooksPathScope]' '[null,null]'
+# One given on the command line, as GIT_CONFIG_PARAMETERS passes it, counts as well.
+assert_exit 0 test "$(git -c core.hooksPath=/cmd/hooks -C "$r" config --show-scope --get core.hooksPath | cut -f 1)" = command
+hp=$(GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.hooksPath GIT_CONFIG_VALUE_0=/env/hooks sh "$DETECT" "$r" | jq -c '[.hooksPath, .hooksPathScope]')
+assert_exit 0 test "$hp" = '["/env/hooks","command"]'
+
+# gitHooks: the hooks git runs from .git/hooks with no hooks path, by name. Git's own
+# samples, and a file that isn't executable, which git skips, don't count.
+hooks_dir=$(git -C "$r" rev-parse --absolute-git-dir)/hooks
+mkdir -p "$hooks_dir"
+printf '#!/bin/sh\n' >"$hooks_dir/pre-commit.sample"
+printf '#!/bin/sh\n' >"$hooks_dir/post-merge"
+printf '#!/bin/sh\n' >"$hooks_dir/pre-push"
+printf '#!/bin/sh\n' >"$hooks_dir/commit-msg"
+chmod +x "$hooks_dir/pre-commit.sample" "$hooks_dir/pre-push" "$hooks_dir/commit-msg"
+mkdir "$hooks_dir/pre-rebase"
+assert_field "$r" '.gitHooks' '["commit-msg","pre-push"]'
+# A linked worktree shares them, as git runs the same ones there.
+commit "$r"
+wt=$(tmp_dir)/wt
+git -C "$r" worktree add -q "$wt" 2>/dev/null || _assert_fail "cannot add a worktree"
+assert_field "$wt" '.gitHooks' '["commit-msg","pre-push"]'
+rm -f "$hooks_dir/pre-push" "$hooks_dir/commit-msg"
+assert_field "$r" '.gitHooks' '[]'
 # Detecting changes no git config.
 before=$(git -C "$r" config --local --list)
 detect "$r" >/dev/null

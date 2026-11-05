@@ -95,6 +95,17 @@ assert_exit 0 test "$(env_value "$env" DW_CI_ALLOWLIST)" = "$(printf ".github/wo
 assert_exit 0 sh -n "$env"
 assert_contains "$out" '"path":".claude/dev-workflow.json"'
 assert_contains "$out" '"path":".githooks/dev-workflow.env"'
+# In the form Prettier prints: a short list on its key's line, a long one a line an item.
+pf_text=$(cat "$r/.claude/dev-workflow.json")
+assert_contains "$pf_text" '
+  "stack": ["node-tooling"],
+'
+assert_contains "$pf_text" '
+  "ciAllowlist": [
+    ".github/workflows/release check.yml",
+    ".github/workflows/it'"'"'s.yml"
+  ]
+}'
 
 # A rerun with the same answers is byte-identical, and says so.
 cp "$r/.claude/dev-workflow.json" "$work/mixed-pf"

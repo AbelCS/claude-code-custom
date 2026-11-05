@@ -13,9 +13,11 @@
 # one, is an error before anything is read.
 #
 # A managed section sits between "<!-- dev-workflow:begin <section> -->" and
-# "<!-- dev-workflow:end <section> -->", and its ledger key is "AGENTS.md#<section>".
-# Its fingerprint is ledger.sh's hash of the text after legacy_normalise, so line
-# endings and trailing spaces don't count as edits. For each section:
+# "<!-- dev-workflow:end <section> -->", with a blank line inside each, the form
+# Prettier keeps, and its ledger key is "AGENTS.md#<section>". Its fingerprint is
+# ledger.sh's hash of the text after agents-normalise.awk, so formatting such as line
+# endings, blank lines, list markers and table padding doesn't count as an edit, and a
+# project that runs Prettier keeps its sections managed. For each section:
 #   create    no markers and no record: added after the section before it, else
 #             before the one after it, else where an old block was, else at the end
 #   update    the text is what was recorded and the template changed: replaced
@@ -60,6 +62,8 @@ here=$(dirname -- "$0")
 . "$here/agents-legacy.sh"
 # shellcheck source=plugins/dev-workflow/scripts/setup/agents-assemble.sh
 . "$here/agents-assemble.sh"
+# shellcheck source=plugins/dev-workflow/scripts/setup/agents-text.sh
+. "$here/agents-text.sh"
 # shellcheck source=plugins/dev-workflow/scripts/setup/paths.sh
 . "$here/paths.sh"
 [ -f "$LEGACY_DIR/issues.md" ] || die "published texts not found in: $LEGACY_DIR"
@@ -81,9 +85,6 @@ mkdir "$work/p"
 : >"$work/legacy-report"
 : >"$work/ledger"
 
-newline() { if [ "$crlf" = true ]; then printf '\r\n'; else printf '\n'; fi; }
-eol() { if [ "$crlf" = true ]; then awk '{ printf "%s\r\n", $0 }'; else cat; fi; }
-
 # --- the file as it is
 
 fresh=true
@@ -96,21 +97,6 @@ if [ -e "$agents" ] && [ -n "$(legacy_normalise <"$agents")" ]; then
   [ "$(tail -c 1 "$work/src" | od -An -c | tr -d ' ')" = '\n' ] || newline >>"$work/src"
 fi
 awk -v out="$work/p" -f "$here/agents-split.awk" "$work/src" || exit 2
-
-fingerprint() { legacy_normalise <"$1" >"$work/norm" && sh "$here/ledger.sh" hash "$work/norm"; }
-
-report() { # <section> <action> [diff] [detail]
-  jq -cn --arg s "$1" --arg a "$2" --arg d "${3:-}" --arg t "${4:-}" \
-    '{section: $s, action: $a} + (if $d == "" then {} else {diff: $d} end) +
-     (if $t == "" then {} else {detail: $t} end)'
-}
-
-difference() { # <labels> <a-file> <b-file>: a unified diff of their normalised text
-  legacy_normalise <"$2" >"$work/diff-a"
-  legacy_normalise <"$3" >"$work/diff-b"
-  printf -- '--- %s\n+++ %s\n' "${1%% *}" "${1#* }"
-  diff -u "$work/diff-a" "$work/diff-b" | sed '1,2d'
-}
 
 # --- where things are
 
@@ -175,7 +161,7 @@ for s in $SECTIONS; do
   {
     [ "$gap" = false ] || newline
     printf '<!-- dev-workflow:begin %s -->\n' "$s" | eol
-    eol <"$tpl/$s.md"
+    section "$tpl/$s.md"
     printf '<!-- dev-workflow:end %s -->\n' "$s" | eol
   } >>"$work/insert.$at"
 done

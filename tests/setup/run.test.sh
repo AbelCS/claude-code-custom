@@ -10,6 +10,12 @@ RUN="$ROOT/plugins/dev-workflow/scripts/setup/run.sh"
 LEGACY="$ROOT/plugins/dev-workflow/skills/setup/references/legacy"
 work=$(tmp_dir)
 
+# A hooks path in this machine's git config must not change a result.
+GIT_CONFIG_GLOBAL=$work/gitconfig
+GIT_CONFIG_NOSYSTEM=1
+: >"$GIT_CONFIG_GLOBAL"
+export GIT_CONFIG_GLOBAL GIT_CONFIG_NOSYSTEM
+
 # --- stubs: gh signed in, Claude Code new enough, every plugin installed
 
 stubs=$work/stubs
@@ -210,6 +216,25 @@ assert_contains "$(cat "$work/calls")" 'claude plugin install serena@claude-plug
 assert_contains "$(jq -c .permissions.allow "$r/.claude/settings.local.json")" 'Bash(gh pr merge *)'
 registry superpowers@claude-plugins-official context7@claude-plugins-official serena@claude-plugins-official \
   intent@intent ui-ux-pro-max@ui-ux-pro-max-skill
+
+# --- hooks in .git/hooks: a conflict, and the hooks left off, unless moving them is approved
+
+r=$work/git-hooks
+new_repo "$r"
+printf '#!/bin/sh\n' >"$r/.git/hooks/pre-push"
+chmod +x "$r/.git/hooks/pre-push"
+plan=$(run "$r" plan)
+assert_exit 0 test "$(action "$plan" .git/hooks)" = conflict
+assert_exit 0 test -z "$(action "$plan" core.hooksPath)"
+run "$r" apply >/dev/null
+assert_exit 1 git -C "$r" config core.hooksPath
+jq '. + {approvals: {moveGitHooks: true}}' "$answers" >"$work/move.json"
+plan=$(run "$r" plan "$work/move.json")
+assert_exit 0 test "$(action "$plan" .git/hooks/pre-push)" = update
+assert_exit 0 test -x "$r/.git/hooks/pre-push"
+run "$r" apply "$work/move.json" >/dev/null
+assert_exit 0 test -x "$r/.githooks/pre-push.local"
+assert_exit 0 test "$(git -C "$r" config core.hooksPath)" = .githooks
 
 # --- CLAUDE.md as a symlink
 

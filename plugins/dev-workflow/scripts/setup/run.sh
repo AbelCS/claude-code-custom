@@ -27,7 +27,9 @@
 # written before CLAUDE.md's text moves into it, so it still gets the project's part.
 #
 # The answers are JSON: the project file's own fields, and "approvals", whose
-# githubSettings, mergePermission and installPlugins are each false unless set.
+# githubSettings, mergePermission, installPlugins and moveGitHooks are each false
+# unless set. moveGitHooks moves the hooks in .git/hooks into .githooks before the
+# hooks are turned on, which would stop them: install-hooks.sh --move-git-hooks.
 # skills/setup/references/answers.md has the details.
 #
 # Nothing is read or written through a folder that leads out of the repo through a
@@ -99,8 +101,8 @@ jq -e -s 'length == 1 and (.[0] | type == "object")' "$work/answers.json" >/dev/
 bad=$(jq -r '(.approvals // {}) as $a
   | if ($a | type) != "object" then "approvals has to be an object"
     else [$a | to_entries[]
-      | select((.key | IN("githubSettings", "mergePermission", "installPlugins") | not) or (.value | type) != "boolean")
-      | .key] | if length > 0 then "approvals can only be githubSettings, mergePermission and installPlugins, each true or false, not: \(join(", "))" else empty end
+      | select((.key | IN("githubSettings", "mergePermission", "installPlugins", "moveGitHooks") | not) or (.value | type) != "boolean")
+      | .key] | if length > 0 then "approvals can only be githubSettings, mergePermission, installPlugins and moveGitHooks, each true or false, not: \(join(", "))" else empty end
     end' "$work/answers.json") || die "cannot read the answers"
 [ -z "$bad" ] || die "$bad"
 jq 'del(.approvals)' "$work/answers.json" >"$work/facts.json" || die "cannot read the answers"
@@ -128,42 +130,6 @@ agents() {
     detail: ([.detail, .diff] | map(select(. != null and . != "")) | join("\n"))}' "$work/agents.out" >>"$2"
 }
 
-# copy_in <from> <to> <names...>: copies each that's there, a symlink as one pointing
-# where the original does: a link to <from>'s AGENTS.md to the copy's, and any other
-# to its target in <from>, so the copy still sees each as what it is.
-copy_in() {
-  _from=$1
-  _to=$2
-  shift 2
-  for _name in "$@"; do
-    [ -e "$_from/$_name" ] || [ -L "$_from/$_name" ] || continue
-    mkdir -p -- "$(dirname -- "$_to/$_name")" || return 2
-    if path_link_is "$_from/$_name" "$_from/AGENTS.md"; then
-      ln -s -- "$_to/AGENTS.md" "$_to/$_name" || return 2
-    elif [ -L "$_from/$_name" ]; then
-      _target=$(readlink -- "$_from/$_name") || return 2
-      case $_target in /*) ;; *) _target=$(dirname -- "$_from/$_name")/$_target ;; esac
-      ln -s -- "$_target" "$_to/$_name" || return 2
-    else
-      cp -R -p -- "$_from/$_name" "$_to/$_name" || return 2
-    fi
-  done
-}
-
-# only_old_blocks <dir>: whether AGENTS.md is new and CLAUDE.md's text, moved into it,
-# would be nothing but old blocks, which agents-md.sh replaces. Tried on a copy.
-only_old_blocks() {
-  [ ! -L "$1/AGENTS.md" ] || return 1
-  if [ -e "$1/AGENTS.md" ] && grep -q '[^[:space:]]' "$1/AGENTS.md"; then return 1; fi
-  rm -rf "$work/probe" && mkdir "$work/probe" || return 1
-  copy_in "$1" "$work/probe" CLAUDE.md || return 1
-  sh "$here/claude-md.sh" apply "$work/probe" >/dev/null 2>&1 || return 1
-  [ -f "$work/probe/AGENTS.md" ] || return 1
-  sh "$here/agents-md.sh" apply "$work/probe" "$templates/agents" >/dev/null 2>&1 || return 1
-  ! awk '/^<!-- dev-workflow:begin /{ skip = 1 } !skip { print } /^<!-- dev-workflow:end /{ skip = 0 }' \
-    "$work/probe/AGENTS.md" | grep -q '[^[:space:]]'
-}
-
 # files <dir> <out>: steps 1 to 3, written in <dir>. A CLAUDE.md that claude-md.sh
 # refuses is a conflict line, and sets claude_refused.
 claude_refused=false
@@ -179,95 +145,13 @@ files() {
   agents "$1" "$2"
 }
 
-line() { # <path> <action> [detail]
-  jq -cn --arg p "$1" --arg a "$2" --arg d "${3:-}" '{path: $p, action: $a, detail: $d}'
-}
-
-# docs <mode> <out>: step 6.
-docs() {
-  for _d in docs/superpowers/specs docs/superpowers/plans; do
-    if [ -d "$root/$_d" ]; then
-      line "$_d" keep
-    elif [ -e "$root/$_d" ] || [ -L "$root/$_d" ]; then
-      line "$_d" conflict "there, but not a folder, so left alone"
-    else
-      line "$_d" create "with a .gitkeep, so git keeps the empty folder"
-      if [ "$1" = apply ]; then
-        mkdir -p -- "$root/$_d" && : >"$root/$_d/.gitkeep" || return 2
-      fi
-    fi
-  done >>"$2"
-  for _f in decisions maintenance; do
-    _path=docs/$_f.md
-    if [ -f "$root/$_path" ]; then
-      line "$_path" keep
-    elif [ -e "$root/$_path" ] || [ -L "$root/$_path" ]; then
-      line "$_path" conflict "there, but not a file, so left alone"
-    else
-      line "$_path" create
-      if [ "$1" = apply ]; then
-        mkdir -p -- "$root/docs" && cp -- "$templates/docs/$_f.md" "$root/$_path" || return 2
-      fi
-    fi
-  done >>"$2"
-}
-
-# plugins <mode> <project-file> <out>: step 7.
-plugins() {
-  approved installPlugins || return 0
-  _screens=$(jq -r '.hasScreens == true' "$2" 2>/dev/null)
-  printf '%s\n' "$tools" | jq -r --argjson screens "${_screens:-false}" '.plugins[]
-    | select((.present | not) and (.when == "always" or $screens))
-    | [.name, (.marketplace // "-"), .id, .install] | join("\t")' >"$work/plugins" || return 2
-  while IFS=$(printf '\t') read -r _name _market _id _install; do
-    if [ "$1" = plan ]; then
-      line "plugin:$_name" create "$_install"
-      continue
-    fi
-    [ "$_market" = - ] || "$CLAUDE" plugin marketplace add "$_market" >/dev/null 2>&1
-    if "$CLAUDE" plugin install "$_id" >"$work/install.out" 2>&1; then
-      line "plugin:$_name" create "$_install"
-    else
-      line "plugin:$_name" conflict "couldn't install it: $(cat "$work/install.out"). Run: $_install"
-    fi
-  done <"$work/plugins" >>"$3"
-}
-
-# github <mode> <out>: step 8.
-github() {
-  approved githubSettings || return 0
-  if [ "$(printf '%s\n' "$detected" | jq -r .remote)" != github ]; then
-    line github conflict "origin isn't on GitHub, so no GitHub settings were changed" >>"$2"
-    return 0
-  fi
-  _slug=$(git -C "$root" remote get-url origin 2>/dev/null |
-    sed -E 's#^.*[Gg][Ii][Tt][Hh][Uu][Bb]\.[Cc][Oo][Mm][:/]+##; s#/+$##; s#\.git$##')
-  _plan=
-  [ "$1" = apply ] || _plan=--plan
-  if ! sh "$here/github-settings.sh" $_plan "$_slug" >>"$2" 2>"$work/github.err"; then
-    line "github:$_slug" conflict "$(cat "$work/github.err")" >>"$2"
-  fi
-}
-
-# Every line for one path becomes one: the strongest action, and every detail.
-merge_lines() {
-  jq -sc 'def rank: {keep: 0, update: 1, create: 2, conflict: 3}[.];
-    reduce .[] as $l ({order: [], by: {}};
-      ($l.detail // "") as $d
-      | if .by[$l.path] == null then
-          .order += [$l.path] | .by[$l.path] = {path: $l.path, action: $l.action, detail: $d}
-        else
-          .by[$l.path] |= (
-            (if ($l.action | rank) > (.action | rank) then .action = $l.action else . end)
-            | if $d == "" or $d == .detail then .
-              elif .detail == "" then .detail = $d
-              else .detail += "\n" + $d end)
-        end)
-    | .order[] as $p | .by[$p]' "$1"
-}
+# shellcheck source=plugins/dev-workflow/scripts/setup/run-steps.sh
+. "$here/run-steps.sh"
 
 merge=
 ! approved mergePermission || merge=--allow-merge
+move=
+! approved moveGitHooks || move=--move-git-hooks
 
 # The plan, worked out on a copy for the files that depend on each other.
 mkdir "$work/stage" "$work/plan" || die "cannot write in: $work"
@@ -275,7 +159,8 @@ mkdir "$work/stage" "$work/plan" || die "cannot write in: $work"
 copy_in "$root" "$work/stage" AGENTS.md CLAUDE.md .claude/dev-workflow.json .githooks/dev-workflow.env ||
   die "cannot copy the files setup changes into: $work/stage"
 files "$work/stage" "$work/plan/lines" || exit 2
-sh "$here/install-hooks.sh" plan "$root" "$templates/githooks" >>"$work/plan/lines" || exit 2
+# shellcheck disable=SC2086 # One flag or none.
+sh "$here/install-hooks.sh" plan "$root" "$templates/githooks" $move >>"$work/plan/lines" || exit 2
 # shellcheck disable=SC2086 # One flag or none.
 sh "$here/settings.sh" plan "$root" $merge >>"$work/plan/lines" || exit 2
 docs plan "$work/plan/lines" || exit 2
@@ -291,7 +176,8 @@ fi
 
 : >"$work/lines"
 files "$root" "$work/lines" || exit 2
-sh "$here/install-hooks.sh" apply "$root" "$templates/githooks" >>"$work/lines" || exit 2
+# shellcheck disable=SC2086 # One flag or none.
+sh "$here/install-hooks.sh" apply "$root" "$templates/githooks" $move >>"$work/lines" || exit 2
 # shellcheck disable=SC2086 # One flag or none.
 sh "$here/settings.sh" apply "$root" $merge >>"$work/lines" || exit 2
 docs apply "$work/lines" || exit 2

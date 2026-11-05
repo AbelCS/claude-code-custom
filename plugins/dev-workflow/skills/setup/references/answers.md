@@ -24,7 +24,8 @@
   "approvals": {
     "githubSettings": false,
     "mergePermission": false,
-    "installPlugins": false
+    "installPlugins": false,
+    "moveGitHooks": false
   }
 }
 ```
@@ -57,3 +58,4 @@ Each one is something outside the project's files that needs the person's yes. E
 | `mergePermission` | Adds `Bash(gh pr merge *)` to `permissions.allow` in `.claude/settings.local.json`, so auto mode doesn't block the agent merging its own pull requests. |
 | `githubSettings` | Sets the GitHub repo behind `origin` to squash merges only, with the pull request's title as the subject, a blank message, and merged branches deleted. Needs admin rights on that repo. |
 | `installPlugins` | Installs the missing plugins `tools.sh` lists, with `claude plugin install`, for the current user. The screen plugins are only installed when `hasScreens` is true. A session needs `/reload-plugins` afterwards. |
+| `moveGitHooks` | Moves the executable hooks in `.git/hooks`, which `detect.sh` lists in `gitHooks`, into `.githooks` before the hooks are turned on, which would otherwise stop them: `pre-commit`, `commit-msg` and `pre-push` as `<name>.local`, which the dev-workflow hook of that name runs first, and any other under its own name. Without it, such hooks are a conflict, and the dev-workflow hooks are left off. |

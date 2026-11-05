@@ -2,20 +2,30 @@
 # activate_plan <root> <work>: decides how install-hooks.sh turns the hooks in
 # .githooks/ on, reporting each file or setting and adding its steps, from what
 # detect.sh finds. Returns 2 on an error. Source this file, from install-hooks.sh,
-# which has report, step, json_edit and $HOOKS; don't run it.
+# which has report, step, is_hook, json_edit, $HOOKS and $here; don't run it.
 #
-#   husky             a line running each hook, such as .githooks/pre-push "$@", is
-#                     added to .husky/<hook>, keeping what's there
+#   husky             a block running each hook is added at the start of
+#                     .husky/<hook>, keeping what's there: hook-husky.sh
 #   lefthook,         reported with what to add, as their files aren't this
 #   pre-commit,       plugin's to rewrite
 #   simple-git-hooks
-#   core.hooksPath    set to anything but .githooks: never overwritten, but reported
-#                     with what to add to the hooks there
+#   core.hooksPath    in effect from any git config, the repo's or the person's own,
+#                     and anything but .githooks: never overwritten, but reported with
+#                     what to add to the hooks there
+#   .git/hooks        holding executable hooks, which .githooks would stop: reported,
+#                     and the hooks left off, or with the person's yes moved into
+#                     .githooks first: hook-move.sh
 #   package.json      otherwise, a prepare script sets core.hooksPath for every clone,
 #                     keeping a prepare that's there, which runs first. It can't fail
 #                     an install where there's no git, as in some builds
 #   otherwise         core.hooksPath is set to .githooks, now as well with package.json
 # Not a git repo: reported, as there's nothing to turn on.
+
+# shellcheck disable=SC2154 # install-hooks.sh sets here.
+# shellcheck source=plugins/dev-workflow/scripts/setup/hook-husky.sh
+. "$here/hook-husky.sh"
+# shellcheck source=plugins/dev-workflow/scripts/setup/hook-move.sh
+. "$here/hook-move.sh"
 
 ACTIVATE_PREPARE='git config core.hooksPath .githooks || exit 0'
 
@@ -25,32 +35,26 @@ _activate_lines() { # <prefix>: the line running each hook, under a prefix
   done
 }
 
-_activate_husky() { # <root> <work>
+_activate_guarded() { # <prefix>: the same, skipping a repo without the hook
   for _hook in $HOOKS; do
-    _file=$1/.husky/$_hook
-    _line=".githooks/$_hook \"\$@\""
-    if [ -L "$_file" ]; then
-      report ".husky/$_hook" conflict "a symlink, so left alone: add this line to it: $_line"
-    elif [ ! -e "$_file" ]; then
-      printf '%s\n' "$_line" >"$2/husky.$_hook"
-      report ".husky/$_hook" create "runs the dev-workflow hook"
-      step write "$_file" "$2/husky.$_hook" 1
-    elif grep -Fxq -- "$_line" "$_file" 2>/dev/null; then
-      report ".husky/$_hook" keep
-    else
-      [ -f "$_file" ] && [ -r "$_file" ] || {
-        printf 'cannot read: %s\n' "$_file" >&2
-        return 2
-      }
-      {
-        cat -- "$_file"
-        [ ! -s "$_file" ] || [ "$(tail -c 1 "$_file" | od -An -c | tr -d ' ')" = '\n' ] || echo
-        printf '%s\n' "$_line"
-      } >"$2/husky.$_hook"
-      report ".husky/$_hook" update "gets a line running the dev-workflow hook, after what's there"
-      step write "$_file" "$2/husky.$_hook" 0
-    fi
+    printf '%s%s: [ ! -x .githooks/%s ] || .githooks/%s "$@" || exit\n' "$1" "$_hook" "$_hook" "$_hook"
   done
+}
+
+_activate_other_path() { # <path> <scope>
+  case $2 in
+    local | worktree)
+      report core.hooksPath conflict "core.hooksPath is $1, which setup leaves alone. To run the dev-workflow hooks too, add a line to each of these hooks, creating it if needed, and pass pre-push its stdin:
+$(_activate_lines "  $1/")"
+      ;;
+    *)
+      _from="git's $2 config"
+      [ "$2" != command ] || _from="git's command line or environment"
+      report core.hooksPath conflict "core.hooksPath is $1, from $_from, so git runs the hooks there in this repo too, and setup doesn't set .githooks over it, which would stop them here. To run the dev-workflow hooks as well, add a line to each of these hooks there, creating it if needed, and pass pre-push its stdin. Each line skips a repo that hasn't the hook:
+$(_activate_guarded "  $1/")
+Or, to run only this repo's own hooks here, set this repo's with: git config core.hooksPath .githooks"
+      ;;
+  esac
 }
 
 _activate_lefthook() { # <root>
@@ -106,18 +110,19 @@ _activate_package() { # <root> <work>
 }
 
 activate_plan() {
-  # shellcheck disable=SC2154 # install-hooks.sh sets here.
   _detected=$(sh "$here/detect.sh" "$1") || return 2
   _git=$(printf '%s\n' "$_detected" | jq -r .git)
   _tool=$(printf '%s\n' "$_detected" | jq -r .hookTool)
   _path=$(printf '%s\n' "$_detected" | jq -r '.hooksPath // ""')
+  _scope=$(printf '%s\n' "$_detected" | jq -r '.hooksPathScope // ""')
+  _git_hooks=$(printf '%s\n' "$_detected" | jq -r '.gitHooks | join(" ")')
 
   if [ "$_git" != true ]; then
     report core.hooksPath conflict "not a git repo, so the hooks can't be turned on: run git init, then setup again"
     return 0
   fi
   case $_tool in
-    husky) _activate_husky "$1" "$2" || return 2 ;;
+    husky) activate_husky "$1" "$2" || return 2 ;;
     lefthook) _activate_lefthook "$1" ;;
     pre-commit | simple-git-hooks)
       _file=.pre-commit-config.yaml
@@ -126,15 +131,22 @@ activate_plan() {
       ;;
     *)
       case $_path in
-        "" | .githooks | .githooks/) ;;
+        "" | .githooks | .githooks/ | "$1/.githooks" | "$1/.githooks/") ;;
         *)
-          report core.hooksPath conflict "core.hooksPath is $_path, which setup leaves alone. To run the dev-workflow hooks too, add a line to each of these hooks, creating it if needed, and pass pre-push its stdin:
-$(_activate_lines "  $_path/")"
+          _activate_other_path "$_path" "$_scope"
           return 0
           ;;
       esac
+      if [ -z "$_scope" ] && [ -n "$_git_hooks" ]; then
+        move_git_hooks "$1" "$_git_hooks"
+        case $? in
+          0) ;;
+          1) return 0 ;;
+          *) return 2 ;;
+        esac
+      fi
       if [ -f "$1/package.json" ]; then _activate_package "$1" "$2" || return 2; fi
-      if [ -n "$_path" ]; then
+      if [ -n "$_scope" ]; then
         report core.hooksPath keep
       else
         report core.hooksPath update "set to .githooks, which turns the hooks on in this clone"

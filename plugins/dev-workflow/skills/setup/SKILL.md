@@ -12,7 +12,7 @@ Say "Using setup to ..." first. The scripts in `${CLAUDE_PLUGIN_ROOT}/scripts/se
 
 ## 1. Detect
 
-Run `sh ${CLAUDE_PLUGIN_ROOT}/scripts/setup/detect.sh .` from the repo. It prints JSON: whether the repo is empty, its remote and default branch, stack hints and other languages, any hook tool already there (husky, lefthook, pre-commit, simple-git-hooks), the state of `AGENTS.md` and `CLAUDE.md`, the old rule blocks found in them, and whether there's a project file.
+Run `sh ${CLAUDE_PLUGIN_ROOT}/scripts/setup/detect.sh .` from the repo. It prints JSON: whether the repo is empty, its remote and default branch, stack hints and other languages, any hook tool already there (husky, lefthook, pre-commit, simple-git-hooks), the hooks path git uses and where it's set (`hooksPath`, `hooksPathScope`), the executable hooks in `.git/hooks` (`gitHooks`), the state of `AGENTS.md` and `CLAUDE.md`, the old rule blocks found in them, and whether there's a project file.
 
 Read what you need to answer the questions yourself: `package.json` scripts, `pyproject.toml`, a `Makefile`, the CI workflows, an existing `.claude/dev-workflow.json`. An answer you can read is one you don't have to ask.
 
@@ -38,6 +38,7 @@ One question at a time, each with your recommendation first and why. Skip any wh
    - `mergePermission`: let the agent merge its own green pull requests in auto mode. Recommend yes.
    - `githubSettings`: only with a GitHub remote. Squash merges only, the pull request's title as the subject, a blank message, merged branches deleted. Recommend yes. It changes that repo's settings, so name the repo.
    - `installPlugins`: only if plugins are missing. Name them.
+   - `moveGitHooks`: only if `gitHooks` lists any, `hooksPathScope` is null and `hookTool` is `none`. Name them, and say that turning on the dev-workflow hooks would stop them running. Moving them puts each into `.githooks`: `pre-commit`, `commit-msg` and `pre-push` as `<name>.local`, which the dev-workflow hook of that name runs first, and any other under its own name. Recommend yes. With no, the dev-workflow hooks stay off until the person moves or removes them by hand and runs setup again.
 
 ## 4. Show the plan
 
@@ -54,6 +55,7 @@ It prints one JSON line per path: `create`, `update`, `keep` or `conflict`, with
 - what will be created and updated, and what's already right;
 - old rule blocks being replaced (`AGENTS.md#legacy:...`) and text moving from `CLAUDE.md`, which is never dropped;
 - every conflict: a part the project edited, which stays as it is, with the difference from the plugin's text, or something setup can't do, with why.
+- a `core.hooksPath` conflict: git already runs hooks from another folder, set in this repo or in the person's own git config (`hooksPathScope` says which). Setup never sets `.githooks` over it, as that would stop those hooks here. Show the lines its detail gives, to add to the hooks there. For a global or system one, also say that `git config core.hooksPath .githooks` in this repo would run only this repo's hooks here. Leave that choice to the person, and don't run it for them.
 
 Then ask for a yes. A change to the answers means a new plan.
 
