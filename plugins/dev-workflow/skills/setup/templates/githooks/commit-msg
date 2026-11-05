@@ -1,0 +1,88 @@
+#!/bin/sh
+# Checks the commit message format, the issue number and AI attribution.
+# Git runs it as: commit-msg <message file>
+
+# Bytes, so that text in any encoding matches the same way.
+LC_ALL=C
+export LC_ALL
+
+hook_dir=$(dirname "$0")
+if [ ! -r "$hook_dir/dw-lib.sh" ]; then
+  printf 'commit-msg: %s/dw-lib.sh is missing: run the setup skill to restore it\n' "$hook_dir" >&2
+  exit 1
+fi
+# shellcheck source-path=SCRIPTDIR source=dw-lib.sh
+. "$hook_dir/dw-lib.sh"
+
+reject() {
+  printf 'commit-msg: %s\n' "$*" >&2
+  exit 1
+}
+
+# None of the checks here use the env file, and a missing one must not stop every
+# commit in the repo. So this warns, while pre-push, which does need it, still fails.
+if ! dw_load_env; then
+  echo 'commit-msg: warning: still checking the format, issue number and attribution' >&2
+fi
+
+# Prints what git treats as the start of a comment line. "auto" means git chose one
+# for this commit: the scissors line shows it, and without one # is the likely choice.
+comment_string() {
+  comment_config=$(git config --get-regexp '^core\.comment(char|string)$' 2>/dev/null | tail -n 1 | cut -d ' ' -f 2-)
+  case $comment_config in
+    '') printf '#' ;;
+    auto)
+      comment_auto=$(sed -n 's/^\([#;@!$%^&|:]\) -\{24\} >8 -\{24\}$/\1/p' "$1" | tail -n 1)
+      printf '%s' "${comment_auto:-#}"
+      ;;
+    *) printf '%s' "$comment_config" ;;
+  esac
+}
+
+# message_text <file> [with-comments]: prints the message up to the scissors, without any
+# trailing space. Git passes comments and the diff of `commit -v` to this hook, and only
+# cuts at the exact scissors line, so anything looser would hide what it keeps. It removes
+# comments too, but only when cleaning up after an editor: with -m or -F it keeps them, and
+# this hook can't tell which. So a comment is never the subject, and always read for
+# attribution.
+message_text() {
+  COMMENT=$(comment_string "$1") WITH_COMMENTS=${2:-} awk '
+    BEGIN {
+      comment = ENVIRON["COMMENT"]
+      with_comments = ENVIRON["WITH_COMMENTS"]
+    }
+    $0 == comment " ------------------------ >8 ------------------------" { exit }
+    index($0, comment) == 1 && with_comments == "" { next }
+    { sub(/[ \t\r\f\v]+$/, ""); print }
+  ' "$1"
+}
+
+message=$(message_text "$1") || reject "could not read $1"
+subject=$(printf '%s\n' "$message" | sed -n '/[^[:space:]]/{p;q;}')
+
+printf '%s\n' "$subject" |
+  grep -Eq "^((fixup|squash|amend)! )*$DW_SUBJECT" ||
+  reject "expected \"<type>(<scope>): <subject>\", got: $subject"
+
+# Fixups are folded into another commit, and name it instead. A detached HEAD, as in
+# a rebase, gives no branch and so no issue.
+branch=$(git symbolic-ref -q HEAD)
+issue=$(dw_issue_from_branch "${branch#refs/heads/}")
+case $subject in
+  fixup!\ * | squash!\ * | amend!\ *) ;;
+  *)
+    if [ -n "$issue" ]; then
+      printf '%s\n' "$subject" | grep -Eq ": .*[^ ] \\(#$issue\\)\$" ||
+        reject "this branch is for issue #$issue: end the subject with (#$issue), got: $subject"
+    fi
+    ;;
+esac
+
+readable=$(message_text "$1" with-comments) || reject "could not read $1"
+# shellcheck disable=SC2119 # With no file, it reads stdin.
+printf '%s\n' "$readable" | dw_has_attribution
+case $? in
+  0) reject "AI attribution isn't allowed: remove the line that credits the tool, or reword it" ;;
+  1) ;;
+  *) reject "could not check the message for AI attribution" ;;
+esac

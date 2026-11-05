@@ -154,6 +154,76 @@ chmod +x "$find_complains/find"
 assert_exit 1 env PATH="$find_complains:$PATH" sh "$run_sh" "$partial"
 assert_contains "$(PATH="$find_complains:$PATH" sh "$run_sh" "$partial" 2>&1)" "Permission denied"
 
+# Tests run at once: each of these two finishes only when it has seen the other start.
+at_once=$(tmp_dir)
+export AT_ONCE="$at_once"
+# shellcheck disable=SC2016 # The test's own dollars.
+write_test "$at_once/a.test.sh" 'echo "a says"; : >"$AT_ONCE/a"
+i=0; until [ -e "$AT_ONCE/z" ]; do i=$((i + 1)); [ "$i" -lt 100 ] || exit 1; sleep 0.1; done
+echo "a again"'
+# shellcheck disable=SC2016 # The test's own dollars.
+write_test "$at_once/z.test.sh" 'echo "z says"; : >"$AT_ONCE/z"
+i=0; until [ -e "$AT_ONCE/a" ]; do i=$((i + 1)); [ "$i" -lt 100 ] || exit 1; sleep 0.1; done
+echo "z again"'
+assert_exit 0 sh "$run_sh" "$at_once"
+expected_output="ok      $at_once/a.test.sh
+a says
+a again
+ok      $at_once/z.test.sh
+z says
+z again
+2 passed, 0 failed"
+rm -f "$at_once/a" "$at_once/z"
+output=$(sh "$run_sh" "$at_once" 2>&1)
+assert_exit 0 test "$output" = "$expected_output"
+unset AT_ONCE
+
+# In the list's order, whichever finishes first, with every failure reported: however it
+# failed, and with what it printed under its own name.
+failures=$(tmp_dir)
+write_test "$failures/a.test.sh" 'sleep 0.5; echo first-slowly; exit 1'
+write_test "$failures/b.test.sh" 'echo second-passes'
+write_test "$failures/c.test.sh" 'echo third-to-stderr >&2; exit 3'
+write_test "$failures/d.test.sh" 'echo fourth-killed; kill -9 $$'
+expected_output="not ok  $failures/a.test.sh
+first-slowly
+ok      $failures/b.test.sh
+second-passes
+not ok  $failures/c.test.sh
+third-to-stderr
+not ok  $failures/d.test.sh
+fourth-killed
+1 passed, 3 failed"
+assert_exit 1 sh "$run_sh" "$failures"
+output=$(sh "$run_sh" "$failures" 2>/dev/null)
+assert_exit 0 test "$output" = "$expected_output"
+
+# Stopping the run stops the tests, which would otherwise carry on with no one to read them.
+stopped=$(tmp_dir)
+export STOPPED="$stopped"
+# shellcheck disable=SC2016 # The test's own dollars.
+write_test "$stopped/a.test.sh" 'echo $$ >"$STOPPED/pid"
+while :; do sleep 0.1; done'
+sh "$run_sh" "$stopped" >/dev/null 2>&1 &
+stopped_run=$!
+i=0
+until [ -s "$stopped/pid" ]; do
+  i=$((i + 1))
+  [ "$i" -lt 100 ] || _assert_fail "the test never started"
+  sleep 0.1
+done
+kill -TERM "$stopped_run"
+if wait "$stopped_run"; then
+  _assert_fail "a stopped run passed"
+fi
+i=0
+while kill -0 "$(cat "$stopped/pid")" 2>/dev/null; do
+  i=$((i + 1))
+  [ "$i" -lt 100 ] || _assert_fail "the run stopped and left its test running"
+  sleep 0.1
+done
+unset STOPPED
+
 # --- scripts/check and scripts/verify
 #
 # These run on a copy of the scripts in a temp repo, with stand-ins for

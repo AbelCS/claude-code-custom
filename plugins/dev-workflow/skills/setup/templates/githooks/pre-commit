@@ -1,0 +1,160 @@
+#!/bin/sh
+# Checks what this commit will hold: its formatting, and that no workflow gains a
+# per-PR CI trigger. Git runs it with no arguments from the top of the work tree, and
+# sets GIT_INDEX_FILE for `commit -a` and `commit <path>`, which makes those staged too.
+
+hook_dir=$(dirname "$0")
+if [ ! -r "$hook_dir/dw-lib.sh" ]; then
+  printf 'pre-commit: %s/dw-lib.sh is missing: run the setup skill to restore it\n' "$hook_dir" >&2
+  exit 1
+fi
+# shellcheck source-path=SCRIPTDIR source=dw-lib.sh
+. "$hook_dir/dw-lib.sh"
+
+blocked=0
+block() {
+  printf 'pre-commit: %s\n' "$*" >&2
+  blocked=1
+}
+
+env_broken() {
+  printf 'pre-commit: could not load %s/dev-workflow.env: run the setup skill to create it again\n' "$hook_dir" >&2
+  exit 1
+}
+
+# A value from the caller's environment isn't the project's setting. Unset rather than
+# empty, so that a file that leaves a setting out doesn't read as having none.
+unset DW_FORMATTERS DW_CI_ALLOWLIST
+if dw_load_env; then
+  if [ -z "${DW_FORMATTERS+set}" ] || [ -z "${DW_CI_ALLOWLIST+set}" ]; then
+    env_broken
+  fi
+else
+  # A broken file may have held anything, so this can't say what's allowed. With no
+  # file, the formatters are unknown, but a workflow can still be checked.
+  [ ! -e "$hook_dir/dev-workflow.env" ] || env_broken
+  echo 'pre-commit: warning: formatting not checked, and workflows checked with an empty allowlist' >&2
+  DW_FORMATTERS=
+  DW_CI_ALLOWLIST=
+fi
+
+# Prints what a diff lists, one item per line. -z stops git quoting unusual names, which
+# would change them. A line break in a name becomes a unit separator, for the caller
+# to find, because nothing can keep it in a list of lines. This is a pipeline, so the
+# caller must have already checked that git can run, or be safe if it can't.
+diff_lines() {
+  git diff -z "$@" | LC_ALL=C tr '\n\0' '\037\n'
+}
+
+# committed_triggers <path>: prints the triggers a staged workflow already has, in HEAD
+# under this path or the one git sees it renamed from. Anything that can't vouch for a
+# trigger gives none, which makes it count as gained: a rename from outside the workflows
+# or off the allowlist, a HEAD copy this can't read, and no HEAD or a failing git.
+committed_triggers() {
+  source=$1
+  while IFS= read -r _ && IFS= read -r from && IFS= read -r to; do
+    if [ "$to" = "$1" ]; then source=$from; fi
+  done <<RENAMES
+$(diff_lines --cached --name-status -M --diff-filter=R)
+RENAMES
+  dw_is_workflow "$source" || return 0
+  dw_in_lines "$source" "$DW_CI_ALLOWLIST" && return 0
+  head_copy=$(git show "HEAD:$source" 2>/dev/null) || return 0
+  head_triggers=$(dw_ci_triggers "$head_copy")
+  dw_in_lines '?' "$head_triggers" || printf '%s\n' "$head_triggers"
+}
+
+check_workflows() {
+  while IFS= read -r file; do
+    dw_is_workflow "$file" || continue
+    dw_in_lines "$file" "$DW_CI_ALLOWLIST" && continue
+    # The staged copy is what gets committed, whatever is on disk.
+    if ! content=$(git show ":$file"); then
+      block "could not read the staged copy of $file"
+      continue
+    fi
+    if ! triggers=$(dw_ci_triggers "$content") || dw_in_lines '?' "$triggers"; then
+      block "could not read the triggers of $file: list them plainly under on:, without YAML aliases, anchors, tags or block scalars"
+      continue
+    fi
+    [ -n "$triggers" ] || continue
+    committed=$(committed_triggers "$file")
+    while IFS= read -r trigger; do
+      dw_in_lines "$trigger" "$committed" ||
+        block "$file has a $trigger trigger, and CI runs only for releases: use workflow_dispatch, or add the file to ciAllowlist in .claude/dev-workflow.json and run the setup skill"
+    done <<TRIGGERS
+$triggers
+TRIGGERS
+  done <<FILES
+$staged
+FILES
+}
+
+check_formatting() {
+  [ -n "$DW_FORMATTERS" ] || return 0
+  if ! git diff --name-only >/dev/null; then
+    block 'could not list the unstaged files'
+    return
+  fi
+  unstaged=$(diff_lines --name-only)
+
+  while IFS= read -r rule; do
+    [ -n "$rule" ] || continue
+    glob=${rule%%|*}
+    formatter=${rule#*|}
+    if [ "$glob" = "$rule" ] || [ -z "$glob" ] || [ -z "$formatter" ]; then
+      block "expected \"<glob>|<command>\" in DW_FORMATTERS, got: $rule"
+      continue
+    fi
+
+    set --
+    while IFS= read -r file; do
+      [ -n "$file" ] || continue
+      # In a case pattern, * also matches /, so *.rs is for any folder.
+      # shellcheck disable=SC2254 # The glob is meant as a pattern.
+      case $file in
+        $glob)
+          # A formatter works on the file on disk, which is where it finds its settings,
+          # so the staged copy of a partly staged file can't be checked.
+          if dw_in_lines "$file" "$unstaged"; then
+            block "$file has unstaged changes, so what's staged can't be checked: stage the whole file, or run git stash --keep-index first"
+            continue
+          fi
+          # A name can't pass as an option.
+          case $file in -*) file=./$file ;; esac
+          set -- "$@" "$file"
+          ;;
+      esac
+    done <<FILES
+$staged
+FILES
+    [ $# -gt 0 ] || continue
+
+    # Stdin is the list of rules: a formatter must not be able to read it.
+    if ! sh -c "$formatter \"\$@\"" pre-commit "$@" </dev/null >&2; then
+      block "$formatter failed on these files: format them and stage them again"
+      printf '  %s\n' "$@" >&2
+    fi
+  done <<RULES
+$DW_FORMATTERS
+RULES
+}
+
+if ! git diff --cached --name-only >/dev/null; then
+  echo 'pre-commit: could not list the staged files' >&2
+  exit 1
+fi
+staged=$(diff_lines --name-only --cached --no-renames --diff-filter=d)
+
+separator=$(printf '\037')
+case $staged in
+  *"$separator"*)
+    echo "pre-commit: a staged file has a line break in its name, which can't be checked: rename it" >&2
+    exit 1
+    ;;
+esac
+
+check_workflows
+check_formatting
+
+exit "$blocked"
