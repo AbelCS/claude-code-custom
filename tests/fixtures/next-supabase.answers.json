@@ -1,0 +1,14 @@
+{
+  "stack": ["node-tooling", "nextjs", "supabase"],
+  "hasScreens": true,
+  "defaultBranch": "main",
+  "commands": {
+    "check": "npm run check",
+    "verify": "npm run verify",
+    "format": "npm run format",
+    "formatCheckStaged": [{ "glob": "*.js", "command": "npx prettier --check" }]
+  },
+  "testCommands": ["node --test", "npm run test:db"],
+  "ciAllowlist": [".github/workflows/release-please.yml"],
+  "approvals": { "githubSettings": false, "mergePermission": false, "installPlugins": false }
+}

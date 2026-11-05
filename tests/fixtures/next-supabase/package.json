@@ -1,0 +1,23 @@
+{
+  "name": "next-supabase-fixture",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "format": "prettier --write app lib",
+    "check": "prettier --check app lib && node --test",
+    "test:db": "sh scripts/db-test.sh",
+    "verify": "npm run check && next build && npm run test:db"
+  },
+  "dependencies": {
+    "next": "16.4.5",
+    "react": "19.3.1",
+    "react-dom": "19.3.1"
+  },
+  "devDependencies": {
+    "prettier": "3.9.10",
+    "supabase": "3.0.0"
+  }
+}
