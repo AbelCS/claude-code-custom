@@ -20,6 +20,7 @@ find "$dir" -type d -name verify_only -prune -o -type f -name '*.test.sh' -print
     if output=$(sh "$test_file" 2>&1 </dev/null); then
       passed=$((passed + 1))
       echo "ok      $test_file"
+      [ -z "$output" ] || printf '%s\n' "$output"
     else
       failed=$((failed + 1))
       echo "not ok  $test_file"

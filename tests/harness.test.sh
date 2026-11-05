@@ -122,6 +122,11 @@ write_test "$reads_stdin/a.test.sh" 'cat >/dev/null'
 write_test "$reads_stdin/b.test.sh" 'exit 1'
 assert_contains "$(sh "$run_sh" "$reads_stdin" 2>&1)" "1 passed, 1 failed"
 
+# What a passing test prints is shown, so a skip can't go unnoticed.
+says_skip=$(tmp_dir)
+write_test "$says_skip/a.test.sh" 'echo "SKIP: not on this machine"'
+assert_contains "$(sh "$run_sh" "$says_skip" 2>&1)" "SKIP: not on this machine"
+
 # Finding nothing to run is a failure, never a pass.
 assert_exit 1 sh "$run_sh" "$(tmp_dir)"
 assert_exit 1 sh "$run_sh" "$(tmp_dir)/missing"
@@ -375,15 +380,185 @@ dash_term=$(tmp_dir)
 printf 'run it with -x here\n' >"$dash_term/notes.md"
 assert_exit 1 run_leak "$literal" "$dash_term"
 
-# By default it reads .leak-terms.local and searches plugins/dev-workflow.
-defaults=$(tmp_dir)
-mkdir -p "$defaults/tests/verify_only" "$defaults/plugins/dev-workflow" "$defaults/plugins/other"
-cp "$leak_test" "$defaults/tests/verify_only/"
-printf 'Nothing here.\n' >"$defaults/plugins/dev-workflow/notes.md"
-printf 'acme\n' >"$defaults/plugins/other/notes.md"
-assert_exit 1 sh "$defaults/tests/verify_only/leak.test.sh"
-assert_contains "$(sh "$defaults/tests/verify_only/leak.test.sh" 2>&1)" ".leak-terms.local"
-printf 'acme\n' >"$defaults/.leak-terms.local"
-assert_exit 0 sh "$defaults/tests/verify_only/leak.test.sh"
-printf 'acme\n' >"$defaults/plugins/dev-workflow/notes.md"
-assert_exit 1 sh "$defaults/tests/verify_only/leak.test.sh"
+# Anything it can't read fails, because a leak could be behind it. Permissions
+# don't stop root, so these can't run as root. Each restores the mode before
+# asserting, so the temp folder can always be removed.
+if [ "$(id -u)" -eq 0 ]; then
+  can_lock_files=false
+  echo "SKIP: leak test on unreadable files and folders: running as root"
+else
+  can_lock_files=true
+fi
+
+if "$can_lock_files"; then
+  locked_folder=$(tmp_dir)
+  printf 'Nothing here.\n' >"$locked_folder/notes.md"
+  mkdir "$locked_folder/sub"
+  printf 'acme\n' >"$locked_folder/sub/notes.md"
+  chmod 000 "$locked_folder/sub"
+  output=$(run_leak "$terms" "$locked_folder")
+  code=$?
+  chmod 755 "$locked_folder/sub"
+  assert_exit 0 test "$code" -eq 1
+  assert_contains "$output" "sub"
+
+  locked_file=$(tmp_dir)
+  printf 'Nothing here.\n' >"$locked_file/notes.md"
+  printf 'acme\n' >"$locked_file/x"
+  chmod 000 "$locked_file/x"
+  output=$(run_leak "$terms" "$locked_file")
+  code=$?
+  chmod 644 "$locked_file/x"
+  assert_exit 0 test "$code" -eq 1
+  assert_contains "$output" "x"
+
+  locked_terms="$(tmp_dir)/terms"
+  printf 'acme\n' >"$locked_terms"
+  chmod 000 "$locked_terms"
+  output=$(run_leak "$locked_terms" "$clean")
+  code=$?
+  chmod 644 "$locked_terms"
+  assert_exit 0 test "$code" -eq 1
+  assert_contains "$output" "$locked_terms"
+fi
+
+# A term file with Windows line endings still matches.
+crlf_terms="$(tmp_dir)/terms"
+printf 'first\r\nacme\r\n' >"$crlf_terms"
+crlf_leak=$(tmp_dir)
+printf 'Built for acme people.\n' >"$crlf_leak/notes.md"
+assert_exit 1 run_leak "$crlf_terms" "$crlf_leak"
+assert_contains "$(run_leak "$crlf_terms" "$crlf_leak")" "notes.md contains \"acme\""
+assert_exit 0 run_leak "$crlf_terms" "$clean"
+
+# By default it reads .leak-terms.local and searches every tracked file in the
+# repo, and nothing else.
+default_repo=$(tmp_dir)
+default_leak="$default_repo/tests/verify_only/leak.test.sh"
+new_repo "$default_repo"
+mkdir -p "$default_repo/tests/verify_only" "$default_repo/docs" "$default_repo/plugins/dev-workflow"
+cp "$leak_test" "$default_repo/tests/verify_only/"
+printf 'Nothing here.\n' >"$default_repo/plugins/dev-workflow/notes.md"
+printf 'Nothing here.\n' >"$default_repo/docs/notes.md"
+printf '.leak-terms.local\nignored.md\nignored-folder/\n' >"$default_repo/.gitignore"
+git -C "$default_repo" add .
+git -C "$default_repo" commit -q -m "first"
+
+# The term file is required, and a clean repo passes.
+assert_exit 1 sh "$default_leak"
+assert_contains "$(sh "$default_leak" 2>&1)" ".leak-terms.local"
+printf 'acme\n' >"$default_repo/.leak-terms.local"
+assert_exit 0 sh "$default_leak"
+
+# Git-ignored and untracked files don't count, in their contents or names.
+mkdir -p "$default_repo/ignored-folder"
+printf 'acme\n' >"$default_repo/ignored.md"
+printf 'acme\n' >"$default_repo/ignored-folder/notes.md"
+printf 'acme\n' >"$default_repo/ignored-folder/acme.md"
+printf 'acme\n' >"$default_repo/untracked.md"
+printf 'Nothing here.\n' >"$default_repo/acme-untracked.md"
+assert_exit 0 sh "$default_leak"
+rm "$default_repo/acme-untracked.md"
+
+# A staged file counts as tracked.
+git -C "$default_repo" add untracked.md
+assert_exit 1 sh "$default_leak"
+assert_contains "$(sh "$default_leak" 2>&1)" "untracked.md contains \"acme\""
+git -C "$default_repo" rm -q -f --cached untracked.md
+rm "$default_repo/untracked.md"
+
+# A term in a committed file outside plugins/ fails.
+printf 'Built for ACME people.\n' >"$default_repo/docs/notes.md"
+git -C "$default_repo" commit -q -a -m "add a leak outside the plugins"
+assert_exit 1 sh "$default_leak"
+assert_contains "$(sh "$default_leak" 2>&1)" "docs/notes.md contains \"acme\""
+printf 'Nothing here.\n' >"$default_repo/docs/notes.md"
+git -C "$default_repo" commit -q -a -m "remove it"
+assert_exit 0 sh "$default_leak"
+
+# A term in a tracked file's name or folder fails.
+mkdir -p "$default_repo/docs/acme-parts"
+printf 'Nothing here.\n' >"$default_repo/docs/acme-parts/notes.md"
+git -C "$default_repo" add docs/acme-parts/notes.md
+assert_exit 1 sh "$default_leak"
+assert_contains "$(sh "$default_leak" 2>&1)" "docs/acme-parts/notes.md"
+git -C "$default_repo" rm -q -f docs/acme-parts/notes.md
+assert_exit 0 sh "$default_leak"
+
+# File names with spaces or non-ASCII characters are searched, and shown as is.
+accented_name=$(printf 'docs/caf\303\251.md')
+for unusual_name in 'docs/with space.md' "$accented_name"; do
+  printf 'acme\n' >"$default_repo/$unusual_name"
+  git -C "$default_repo" add "$unusual_name"
+  assert_exit 1 sh "$default_leak"
+  assert_contains "$(sh "$default_leak" 2>&1)" "$unusual_name contains \"acme\""
+  git -C "$default_repo" rm -q -f "$unusual_name"
+done
+assert_exit 0 sh "$default_leak"
+
+# A tracked file it can't find can't be vouched for.
+printf 'Nothing here.\n' >"$default_repo/docs/gone.md"
+git -C "$default_repo" add docs/gone.md
+rm "$default_repo/docs/gone.md"
+assert_exit 1 sh "$default_leak"
+assert_contains "$(sh "$default_leak" 2>&1)" "docs/gone.md"
+git -C "$default_repo" rm -q --cached docs/gone.md
+assert_exit 0 sh "$default_leak"
+
+# Tracked files it can't read fail the same way.
+if "$can_lock_files"; then
+  mkdir "$default_repo/locked"
+  printf 'Nothing here.\n' >"$default_repo/locked/notes.md"
+  printf 'Nothing here.\n' >"$default_repo/locked-file.md"
+  git -C "$default_repo" add locked/notes.md locked-file.md
+
+  chmod 000 "$default_repo/locked"
+  output=$(sh "$default_leak" 2>&1)
+  code=$?
+  chmod 755 "$default_repo/locked"
+  assert_exit 0 test "$code" -eq 1
+  assert_contains "$output" "locked/notes.md"
+
+  chmod 000 "$default_repo/locked-file.md"
+  output=$(sh "$default_leak" 2>&1)
+  code=$?
+  chmod 644 "$default_repo/locked-file.md"
+  assert_exit 0 test "$code" -eq 1
+  assert_contains "$output" "locked-file.md"
+
+  git -C "$default_repo" rm -q -f locked/notes.md locked-file.md
+fi
+
+# A tracked symlink has no contents of its own to read, wherever it points, but
+# its name still counts.
+ln -s docs "$default_repo/folder-link"
+ln -s missing "$default_repo/broken-link"
+git -C "$default_repo" add folder-link broken-link
+assert_exit 0 sh "$default_leak"
+ln -s docs "$default_repo/acme-link"
+git -C "$default_repo" add acme-link
+assert_exit 1 sh "$default_leak"
+git -C "$default_repo" rm -q -f acme-link folder-link broken-link
+assert_exit 0 sh "$default_leak"
+
+# Nothing to search is a failure, never a pass.
+assert_exit 1 run_leak "$terms" "$(tmp_dir)"
+empty_repo=$(tmp_dir)
+new_repo "$empty_repo"
+mkdir -p "$empty_repo/tests/verify_only"
+cp "$leak_test" "$empty_repo/tests/verify_only/"
+printf 'acme\n' >"$empty_repo/.leak-terms.local"
+assert_exit 1 sh "$empty_repo/tests/verify_only/leak.test.sh"
+assert_contains "$(sh "$empty_repo/tests/verify_only/leak.test.sh" 2>&1)" "nothing to search"
+
+# Outside a git repo there is no list of tracked files, which is a failure.
+not_a_repo=$(tmp_dir)
+mkdir -p "$not_a_repo/tests/verify_only"
+cp "$leak_test" "$not_a_repo/tests/verify_only/"
+printf 'acme\n' >"$not_a_repo/.leak-terms.local"
+assert_exit 1 sh "$not_a_repo/tests/verify_only/leak.test.sh"
+
+# Pointed at a folder, it searches all of that folder, tracked or not, even
+# inside a repo.
+printf 'acme\n' >"$default_repo/ignored-folder/more.md"
+assert_exit 1 env LEAK_SEARCH_ROOT="$default_repo/ignored-folder" sh "$default_leak"
