@@ -244,30 +244,87 @@ printf 'BAD\n' >"$repo/renamed.rs"
 git -C "$repo" add renamed.rs
 blocks 'renamed.rs'
 
-# A formatter works on the file on disk, which may not be what's staged. Both ways
-# round, the hook says so.
+# A formatter works on the file on disk, which may not be what's staged. So a partly
+# staged file blocks, either way round, without asking the formatter about the wrong
+# copy, and the hook says what to do.
+partly_staged='has unstaged changes'
 fresh
 stage b.rs 'BAD'
 printf 'clean\n' >"$repo/b.rs"
-warned=$(attempt 2>&1) || _assert_fail "expected the commit to pass: $warned"
-assert_contains "$warned" 'warning'
-assert_contains "$warned" 'b.rs'
+blocks 'b.rs' "$partly_staged" 'stage the whole file' 'git stash --keep-index'
+log_is ''
 
 fresh
 stage b.rs 'clean'
 printf 'BAD\n' >"$repo/b.rs"
-blocks 'b.rs' 'warning'
+blocks 'b.rs' "$partly_staged" 'stage the whole file' 'git stash --keep-index'
+log_is ''
 
-# No warning when disk and index agree.
 fresh
 stage b.rs 'clean'
-assert_not_contains "$(attempt 2>&1)" 'warning'
+printf 'clean too\n' >"$repo/b.rs"
+blocks 'b.rs' "$partly_staged"
 
-# A file staged but gone from disk can't be checked.
+# A file staged but gone from disk can't be checked either.
 fresh
 stage b.rs 'clean'
 rm "$repo/b.rs"
-blocks 'b.rs' 'warning'
+blocks 'b.rs' "$partly_staged"
+log_is ''
+
+# The other files are still checked.
+fresh
+stage b.rs 'clean'
+printf 'clean too\n' >"$repo/b.rs"
+stage c.rs 'BAD'
+blocks 'b.rs' "$partly_staged" 'c.rs' './fmt'
+log_is 'fmt[c.rs]
+fmt[c.rs]'
+
+# What the hook suggests works, both ways.
+fresh
+stage b.rs 'BAD'
+printf 'clean\n' >"$repo/b.rs"
+git -C "$repo" add b.rs
+assert_exit 0 attempt
+log_is 'fmt[b.rs]'
+
+fresh
+stage b.rs 'BAD'
+printf 'clean\n' >"$repo/b.rs"
+git -C "$repo" stash push -q --keep-index
+blocks 'b.rs' './fmt'
+assert_not_contains "$blocked" "$partly_staged"
+git -C "$repo" stash drop -q
+
+fresh
+stage b.rs 'clean'
+printf 'BAD\n' >"$repo/b.rs"
+git -C "$repo" stash push -q --keep-index
+assert_exit 0 attempt
+git -C "$repo" stash drop -q
+
+# Nothing is said when disk and index agree, and `commit -a` makes them agree.
+fresh
+stage b.rs 'clean'
+assert_not_contains "$(attempt 2>&1)" "$partly_staged"
+fresh
+printf 'clean too\n' >"$repo/a.rs"
+assert_exit 0 attempt -a
+fresh
+printf 'clean too\n' >"$repo/a.rs"
+assert_exit 0 attempt a.rs
+
+# Without a formatter rule for the file, unstaged changes are the owner's business,
+# and so are ones in a file that isn't being committed.
+fresh
+stage b.ts 'clean'
+printf 'BAD\n' >"$repo/b.ts"
+assert_exit 0 attempt
+fresh
+stage c.rs 'clean'
+printf 'BAD\n' >"$repo/a.rs"
+assert_exit 0 attempt
 
 # A formatter that can't run blocks: it checked nothing.
 write_env '*.rs|./no-such-formatter' ''
@@ -338,8 +395,6 @@ workflow_blocks push 'on:
   push'
 workflow_blocks push '---
 on: push'
-workflow_blocks push 'on: &triggers push'
-workflow_blocks push 'on: !!str push'
 
 # Flow sequences.
 workflow_blocks push 'on: [push]'
@@ -354,7 +409,6 @@ workflow_blocks push "on: [
   push,
 ]
 $jobs"
-workflow_blocks push 'on: &triggers [push]'
 
 # Flow maps.
 workflow_blocks pull_request 'on: { pull_request: {} }'
@@ -530,6 +584,96 @@ workflow_passes 'on: {
   workflow_dispatch: {} # , push: {}
 }'
 
+# A colon can follow a closing quote directly, and a quoted name is the whole name.
+workflow_blocks push 'on: {"push":null}'
+workflow_blocks push "on: {'push':null}"
+workflow_blocks push 'on: {"push" : null}'
+workflow_blocks push '"on":push'
+workflow_blocks push 'on:
+  "push":null'
+workflow_passes 'on: ["push: x"]'
+workflow_passes 'on: {"a":"push"}'
+
+# A list item's value can start on the next line.
+workflow_blocks push 'on:
+  -
+    push'
+workflow_blocks push 'on:
+-
+  push:
+    branches: [main]
+jobs:
+  build: {}'
+workflow_passes 'on:
+  -
+    workflow_dispatch
+  -
+    schedule:
+      - push'
+
+# Shapes this can't follow block, because they could be hiding anything.
+workflow_unreadable() { # <file content>
+  fresh
+  stage "$workflow" "$1"
+  blocks "$workflow" 'could not read the triggers'
+}
+
+for start in '*x' '|' '|-' '>' '>-' '&a' '&a push' '!!str' '!!str push' '? push' '<<: *x'; do
+  workflow_unreadable "on: $start"
+  workflow_unreadable "on:
+  $start
+  push:"
+  workflow_unreadable "on:
+  workflow_dispatch:
+  $start"
+  workflow_unreadable "on:
+  - $start"
+  workflow_unreadable "on:
+- workflow_dispatch
+- $start"
+  workflow_unreadable "on:
+  -
+    $start"
+  workflow_unreadable "on: [$start]"
+  workflow_unreadable "on: [workflow_dispatch, $start]"
+  workflow_unreadable "on: {$start}"
+done
+workflow_unreadable 'on: >-
+  push'
+workflow_unreadable 'on:
+  &a push:
+    branches: [main]'
+workflow_unreadable 'on:
+  !!str push:'
+
+# A file that's one flow map, wherever it starts.
+workflow_unreadable '{on: push, jobs: {}}'
+workflow_unreadable '--- {on: push}'
+workflow_unreadable '---
+# A comment
+{
+  on: workflow_dispatch
+}'
+workflow_unreadable '  {on: push}'
+
+# As text in quotes, or below the triggers, these characters mean nothing.
+workflow_passes 'on: ["*x", "&a", "? b"]'
+workflow_passes 'on: "*x"'
+workflow_passes "on:
+  workflow_dispatch:
+    inputs:
+      a:
+        description: >-
+          *x
+        default: &a push
+$jobs"
+workflow_passes "name: |
+  text
+on: workflow_dispatch
+env: &e
+  a: *x
+$jobs"
+
 # It's the staged copy that counts, not the one on disk, either way round.
 fresh
 stage "$workflow" 'on: push'
@@ -586,10 +730,120 @@ for renames in true false; do
   assert_exit 0 git -C "$repo" -c "diff.renames=$renames" commit -q -m 'feat: x'
 done
 
-# Moving it to another name inside the folder is checked at the new name.
+# Only a gained trigger blocks: an edit can keep the ones the file has in HEAD, however
+# it writes them or whatever is staged or on disk.
+for kept in 'name: edited
+on: push' 'on: [push]' 'on: { push: {} }' 'on:
+  push:
+    branches: [main]' 'on: [push, workflow_dispatch]' 'on: workflow_dispatch'; do
+  workflow_passes "$kept"
+done
+
+# A new trigger blocks by its own name, beside one that's already there.
+workflow_blocks pull_request 'on: [push, pull_request]'
+assert_not_contains "$blocked" 'has a push trigger'
+workflow_blocks pull_request_target 'on: pull_request_target'
+assert_not_contains "$blocked" 'has a push trigger'
 fresh
-git -C "$repo" mv "$workflow" .github/workflows/moved.yml
-blocks .github/workflows/moved.yml push
+stage "$workflow" 'on: [push, pull_request, pull_request_target, pull_request]'
+blocks "$workflow" 'has a pull_request trigger' 'has a pull_request_target trigger'
+assert_not_contains "$blocked" 'has a push trigger'
+# Named twice in the file, it's still one thing to fix.
+assert_exit 0 test "$(printf '%s\n' "$blocked" | grep -c 'has a pull_request trigger')" = 1
+
+# Another file having the trigger doesn't help a new one.
+fresh
+stage .github/workflows/new.yml 'on: push'
+blocks .github/workflows/new.yml 'has a push trigger'
+
+# HEAD is what it's compared with, not the copy on disk.
+fresh
+stage "$workflow" 'on: [push, pull_request]'
+printf 'on: push\n' >"$repo/$workflow"
+blocks "$workflow" 'has a pull_request trigger'
+fresh
+stage "$workflow" 'name: edited
+on: push'
+printf 'on: [push, pull_request]\n' >"$repo/$workflow"
+assert_exit 0 attempt
+
+# Moved to another name inside the folder, a workflow keeps its triggers, however git
+# is set to see a move. It needs enough content for git to see a move at all.
+fresh
+stage "$workflow" "on: push
+$jobs"
+git -C "$repo" commit -q --no-verify -m 'feat: longer workflow'
+base=$(git -C "$repo" rev-parse HEAD)
+
+moved=.github/workflows/moved.yml
+for renames in true false; do
+  fresh
+  git -C "$repo" mv "$workflow" "$moved"
+  assert_exit 0 git -C "$repo" -c "diff.renames=$renames" commit -q -m 'feat: x'
+done
+fresh
+git -C "$repo" mv "$workflow" '.github/workflows/a b.yml'
+assert_exit 0 attempt
+
+# It can drop a trigger on the way, but not gain one.
+fresh
+git -C "$repo" mv "$workflow" "$moved"
+stage "$moved" "on: workflow_dispatch
+$jobs"
+assert_exit 0 attempt
+fresh
+git -C "$repo" mv "$workflow" "$moved"
+stage "$moved" "on: [push, pull_request]
+$jobs"
+blocks "$moved" 'has a pull_request trigger'
+assert_not_contains "$blocked" 'has a push trigger'
+
+# Rewritten past what git calls a move, it's a new file.
+fresh
+git -C "$repo" mv "$workflow" "$moved"
+stage "$moved" 'on: push'
+blocks "$moved" 'has a push trigger'
+
+# Copied, it's a new file too, and the source stays.
+fresh
+mkdir -p "$repo/.github/workflows"
+cp "$repo/$workflow" "$repo/$moved"
+git -C "$repo" add "$moved"
+blocks "$moved" 'has a push trigger'
+
+# A file the allowlist covers isn't read at all, whatever its shape.
+fresh
+stage "$allowed" 'on: *x'
+assert_exit 0 attempt
+
+# A HEAD copy this can't read counts as having no triggers, so its new shape decides.
+for unreadable_head in 'on: *x' 'on: [push, *x]'; do
+  base=$trigger_base
+  fresh
+  stage "$workflow" "$unreadable_head"
+  git -C "$repo" commit -q --no-verify -m 'feat: unreadable workflow'
+  base=$(git -C "$repo" rev-parse HEAD)
+  workflow_blocks push 'on: push'
+  workflow_passes 'on: workflow_dispatch'
+  workflow_unreadable 'on: *y'
+done
+
+# The first commit has no HEAD, so no triggers.
+git -C "$repo" symbolic-ref HEAD refs/heads/first-commit
+git -C "$repo" read-tree --empty
+stage "$workflow" 'on: push'
+blocks "$workflow" 'has a push trigger'
+stage "$workflow" 'on: workflow_dispatch'
+assert_exit 0 attempt
+git -C "$repo" symbolic-ref HEAD refs/heads/main
+
+# Back to a workflow with a push trigger, for what git makes of a move onto, off or
+# into the allowlist and the folder.
+base=$trigger_base
+fresh
+stage "$workflow" 'on: push'
+git -C "$repo" commit -q --no-verify -m 'feat: push trigger'
+base=$(git -C "$repo" rev-parse HEAD)
 
 # On to the allowlist it passes, off the allowlist it doesn't.
 fresh
@@ -609,6 +863,16 @@ base=$(git -C "$repo" rev-parse HEAD)
 fresh
 mkdir -p "$repo/.github/workflows"
 git -C "$repo" mv docs/x.yml "$workflow"
+blocks "$workflow" push
+base=$trigger_base
+
+# So is one moved up from a subfolder, where GitHub wasn't running it.
+fresh
+stage .github/workflows/sub/x.yml 'on: push'
+assert_exit 0 attempt
+base=$(git -C "$repo" rev-parse HEAD)
+fresh
+git -C "$repo" mv .github/workflows/sub/x.yml "$workflow"
 blocks "$workflow" push
 base=$trigger_base
 
@@ -645,12 +909,16 @@ warned=$(attempt --allow-empty 2>&1)
 assert_contains "$warned" 'warning'
 
 # Broken: nobody knows what it held, so nothing passes, not even an empty commit.
-for broken in syntax failing unreadable; do
+for broken in syntax failing unreadable empty truncated no-formatters no-allowlist; do
   write_env '*.rs|./fmt' ''
   case $broken in
     syntax) printf "DW_CHECK='unterminated\n" >"$hooks/dev-workflow.env" ;;
     failing) printf 'DW_CHECK=x\nfalse\n' >"$hooks/dev-workflow.env" ;;
     unreadable) chmod 000 "$hooks/dev-workflow.env" ;;
+    empty) : >"$hooks/dev-workflow.env" ;;
+    truncated) printf "DW_DEFAULT_BRANCH='main'\nDW_CHECK='x'\n" >"$hooks/dev-workflow.env" ;;
+    no-formatters) printf "DW_CI_ALLOWLIST=''\n" >"$hooks/dev-workflow.env" ;;
+    no-allowlist) printf "DW_FORMATTERS='*.rs|./fmt'\n" >"$hooks/dev-workflow.env" ;;
   esac
   fresh
   assert_exit 1 attempt --allow-empty
@@ -659,6 +927,11 @@ for broken in syntax failing unreadable; do
   assert_contains "$blocked" 'dev-workflow.env'
   assert_not_contains "$blocked" 'warning'
   log_is ''
+  fresh
+  stage b.rs 'BAD'
+  blocks 'dev-workflow.env'
+  # The caller's environment can't fill in what the file left out.
+  assert_exit 1 env 'DW_FORMATTERS=' 'DW_CI_ALLOWLIST=' git -C "$repo" commit -q -m 'feat: x'
   chmod 644 "$hooks/dev-workflow.env"
 done
 
@@ -675,15 +948,17 @@ mkdir -p "$shim"
 real_git=$(command -v git)
 cat >"$shim/git" <<SHIM
 #!/bin/sh
-if [ "\$1" = "\$FAIL_GIT" ]; then
-  echo 'git failed for the test' >&2
-  exit 128
-fi
+case "\$*" in
+  \$FAIL_GIT)
+    echo 'git failed for the test' >&2
+    exit 128
+    ;;
+esac
 exec "$real_git" "\$@"
 SHIM
 chmod +x "$shim/git"
 
-run_hook_failing_git() { # <git command to fail>
+run_hook_failing_git() { # <pattern for the git arguments to fail>
   (cd "$repo" && PATH="$shim:$PATH" FAIL_GIT=$1 .githooks/pre-commit)
 }
 
@@ -691,10 +966,36 @@ write_env '' ''
 fresh
 stage "$workflow" 'on: workflow_dispatch'
 assert_exit 0 run_hook_failing_git none
-assert_exit 1 run_hook_failing_git diff
-assert_contains "$(run_hook_failing_git diff 2>&1)" 'pre-commit: '
-assert_exit 1 run_hook_failing_git show
-assert_contains "$(run_hook_failing_git show 2>&1)" "$workflow"
+assert_exit 1 run_hook_failing_git 'diff --cached*'
+assert_contains "$(run_hook_failing_git 'diff --cached*' 2>&1)" 'could not list the staged files'
+assert_exit 1 run_hook_failing_git 'show*'
+assert_contains "$(run_hook_failing_git 'show*' 2>&1)" "$workflow"
+
+# Unstaged files decide whether a formatter can be trusted.
+write_env '*.rs|./fmt' ''
+fresh
+stage b.rs 'clean'
+assert_exit 0 run_hook_failing_git none
+assert_exit 1 run_hook_failing_git 'diff --name-only'
+assert_contains "$(run_hook_failing_git 'diff --name-only' 2>&1)" 'could not list the unstaged files'
+
+# If git can't show what HEAD holds, or that a file moved, the trigger counts as gained.
+write_env '' ''
+fresh
+stage "$workflow" 'on: push'
+git -C "$repo" commit -q --no-verify -m 'feat: push trigger'
+base=$(git -C "$repo" rev-parse HEAD)
+fresh
+stage "$workflow" 'name: edited
+on: push'
+assert_exit 0 run_hook_failing_git none
+assert_exit 1 run_hook_failing_git 'show HEAD:*'
+assert_contains "$(run_hook_failing_git 'show HEAD:*' 2>&1)" 'has a push trigger'
+fresh
+git -C "$repo" mv "$workflow" .github/workflows/moved.yml
+assert_exit 0 run_hook_failing_git none
+assert_exit 1 run_hook_failing_git '*--name-status*'
+assert_contains "$(run_hook_failing_git '*--name-status*' 2>&1)" 'has a push trigger'
 
 # --- A missing library can't check anything, so it blocks, and says why
 
