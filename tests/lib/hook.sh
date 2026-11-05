@@ -27,35 +27,47 @@ _hook_run() {
   fi
 }
 
+# Sets _hook_field to <field> of the decision in _hook_output, or says why not and
+# returns 1. Claude Code reads a hook's output as one JSON value, so anything before or
+# after the decision makes it no decision at all.
+_hook_read_decision() {
+  if ! _hook_field=$(printf '%s' "$_hook_output" | jq -sej --arg field "$1" '
+    select(length == 1)
+    | .[0].hookSpecificOutput
+    | select(.hookEventName == "PreToolUse"
+        and (.permissionDecisionReason | type == "string")
+        and (.permissionDecision == "deny" or .permissionDecision == "ask"))
+    | .[$field]' 2>/dev/null); then
+    printf 'hook: the hook printed something other than a decision: %s\n' "$_hook_output" >&2
+    return 1
+  fi
+}
+
 # decision_of <script> <json>: prints deny, ask or none. Prints nothing and fails if
-# the hook failed or printed anything but a complete decision, so that comparing the
-# result fails too.
+# the hook failed or printed anything but a complete decision.
 decision_of() {
   _hook_run "$1" "$2" || return 1
   if [ -z "$_hook_output" ]; then
     echo none
     return 0
   fi
-  if ! printf '%s' "$_hook_output" | jq -er '
-    .hookSpecificOutput
-    | select(.hookEventName == "PreToolUse" and (.permissionDecisionReason | type == "string"))
-    | .permissionDecision
-    | select(. == "deny" or . == "ask")' 2>/dev/null; then
-    printf 'hook: %s printed something other than a decision: %s\n' "$1" "$_hook_output" >&2
-    return 1
-  fi
+  _hook_read_decision permissionDecision || return 1
+  printf '%s\n' "$_hook_field"
 }
 
-# reason_of <script> <json>: prints the reason the hook gave, and nothing if it gave
-# none.
+# reason_of <script> <json>: prints the reason the hook gave, and nothing if it made no
+# decision. Fails like decision_of.
 reason_of() {
   _hook_run "$1" "$2" || return 1
   [ -n "$_hook_output" ] || return 0
-  printf '%s' "$_hook_output" | jq -j '.hookSpecificOutput.permissionDecisionReason'
+  _hook_read_decision permissionDecisionReason || return 1
+  printf '%s' "$_hook_field"
 }
 
 # assert_decision <deny|ask|none> <script> <json>
 assert_decision() {
-  _hook_decision=$(decision_of "$2" "$3")
+  if ! _hook_decision=$(decision_of "$2" "$3"); then
+    _assert_fail "expected $1, got no readable decision for: $3"
+  fi
   [ "$_hook_decision" = "$1" ] || _assert_fail "expected $1, got \"$_hook_decision\" for: $3"
 }

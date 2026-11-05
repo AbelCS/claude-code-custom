@@ -15,7 +15,7 @@
 #   isn't seen, though the shell runs it.
 # - ( a; b ), { a; b; } and compound commands come down to the commands they run. The
 #   headers of for, select and case aren't commands, so they don't come out. A case
-#   pattern does, as it can't be told apart without following the whole grammar.
+#   pattern can, as it can't always be told apart without following the whole grammar.
 #
 # This only reads the text of a command, so it catches mistakes rather than stopping
 # anyone. It can't see through eval, sh -c, aliases or functions.
@@ -29,6 +29,7 @@
 }
 
 END {
+  RESERVED_BEFORE_PAREN = "^(if|then|elif|else|while|until|do|time|for|select|!|[{])$"
   L = length(S)
   commands(1, "")
 }
@@ -36,10 +37,11 @@ END {
 # The list of commands from i up to the closer, or the end of the text. A word being
 # built, the command it joins and the rest of the state belong to one list, so they're
 # put back on the way out: a list inside a word mustn't disturb that word.
-function commands(i, closer,    c, n, saved_cur, saved_word, saved_fresh, saved_drop, saved_base) {
-  saved_cur = cur; saved_word = word; saved_fresh = fresh; saved_drop = drop
+function commands(i, closer,    c, n, saved_cur, saved_word, saved_fresh, saved_closed, saved_header, saved_base) {
+  saved_cur = cur; saved_word = word; saved_fresh = fresh
+  saved_closed = closed; saved_header = header
   saved_base = heredoc_base
-  cur = ""; word = ""; fresh = 1; drop = 0
+  cur = ""; word = ""; fresh = 1; closed = 0; header = ""
   heredoc_base = heredoc_count
 
   while (i <= L) {
@@ -81,9 +83,17 @@ function commands(i, closer,    c, n, saved_cur, saved_word, saved_fresh, saved_
       n = commands(i + 1, ")")
       word = word substr(S, i, n - i)
       i = n
+    } else if (c == "(" && header == "" && fresh && word ~ RESERVED_BEFORE_PAREN) {
+      # A parenthesis ends a word, so this is the keyword. Read the ( again without it.
+      end_word()
+    } else if (c == "(" && header != "") {
+      # A for's ((...)), or a case's first pattern, which ends its header.
+      i = balanced(i)
+      word = ""
+      if (header == "case") header = ""
     } else if (c == "(" && word == "" && fresh) {
       i = commands(i + 1, ")")
-      drop = 1
+      closed = 1
     } else if (c == "(") {
       n = balanced(i)
       word = word substr(S, i, n - i)
@@ -98,7 +108,8 @@ function commands(i, closer,    c, n, saved_cur, saved_word, saved_fresh, saved_
   }
   end_command()
 
-  cur = saved_cur; word = saved_word; fresh = saved_fresh; drop = saved_drop
+  cur = saved_cur; word = saved_word; fresh = saved_fresh
+  closed = saved_closed; header = saved_header
   heredoc_count = heredoc_base
   heredoc_base = saved_base
   return i
@@ -108,19 +119,42 @@ function commands(i, closer,    c, n, saved_cur, saved_word, saved_fresh, saved_
 # that isn't part of the command.
 function end_word() {
   if (word == "") return
-  if (fresh) {
-    if (word ~ /^[A-Za-z_][A-Za-z0-9_]*[+]?=/ || word == "if" || word == "then" ||
-        word == "elif" || word == "else" || word == "while" || word == "until" ||
-        word == "do" || word == "!" || word == "{") {
+  # After a closer only redirections are dropped, and a redirection can have its target
+  # as the next word (closed == 2). Anything else may be a command, as in (a) then b.
+  if (closed) {
+    if (closed == 2) {
+      closed = 1
       word = ""
       return
     }
-    # The rest isn't a command: redirections after a closing word, or a loop or case
-    # header.
-    if (word == "}" || word == "fi" || word == "done" || word == "esac" ||
-        word == "for" || word == "select" || word == "case") {
+    if (word ~ /^[0-9]*(&>|[<>])/) {
+      if (word ~ /^[0-9]*[&<>|]+$/) closed = 2
       word = ""
-      drop = 1
+      return
+    }
+    closed = 0
+  }
+  # A loop's header runs to the separator or to its do, and a case's to its first
+  # pattern.
+  if (header != "") {
+    if (header != "case" && word == "do") header = ""
+    word = ""
+    return
+  }
+  if (fresh) {
+    # -p is the one option of time, and no command has that name.
+    if (word ~ /^[A-Za-z_][A-Za-z0-9_]*[+]?=/ || word ~ /^(if|then|elif|else|while|until|do|time|-p|!|[{])$/) {
+      word = ""
+      return
+    }
+    if (word ~ /^[}]$|^(fi|done|esac)$/) {
+      word = ""
+      closed = 1
+      return
+    }
+    if (word ~ /^(for|select|case)$/) {
+      header = word
+      word = ""
       return
     }
     fresh = 0
@@ -131,16 +165,15 @@ function end_word() {
 
 function end_command() {
   end_word()
-  if (!drop) {
-    sub(/[ \t]+$/, "", cur)
-    if (cur != "") {
-      gsub(/\n/, "\037", cur)
-      print cur
-    }
+  sub(/[ \t]+$/, "", cur)
+  if (cur != "") {
+    gsub(/\n/, "\037", cur)
+    print cur
   }
   cur = ""
   fresh = 1
-  drop = 0
+  closed = 0
+  header = ""
 }
 
 # One piece of a word at i: a quoted string, an expansion or an escaped character, or

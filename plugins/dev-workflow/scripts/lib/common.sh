@@ -6,7 +6,7 @@
 # where they would end only the substitution and their output would be lost.
 #
 # Hooks must do nothing in a project without the project file, and such a project may
-# not have jq. So dw_gate tests for that file with the shell alone, and a hook should
+# not have jq. So dw_gate looks for that file with the shell alone, and a hook should
 # run nothing before dw_gate. Only without CLAUDE_PROJECT_DIR does the search itself
 # use jq, if it's there, to read cwd from the hook input.
 
@@ -52,28 +52,39 @@ dw_ask() {
   _dw_decide ask "$1"
 }
 
-# A dangling link counts as there: it shows the project is set up, and is then denied
-# as broken rather than letting everything through.
-_dw_has_project_file() {
-  [ -e "$1/.claude/dev-workflow.json" ] || [ -L "$1/.claude/dev-workflow.json" ]
+# A dangling link counts as there: a project file shows the project is set up, and is
+# then denied as broken rather than letting everything through.
+_dw_exists() {
+  [ -e "$1" ] || [ -L "$1" ]
 }
 
-# Sets DW_PROJECT_DIR to the nearest directory with a project file, from the input's
-# cwd upward, since a session can run from a subfolder. Returns 1 if there is none.
-_dw_project_from_cwd() {
-  _dw_dir=$(printf '%s' "$DW_INPUT" | jq -r '.cwd | strings' 2>/dev/null) || return 1
-  case $_dw_dir in
-    /*) ;;
-    *) return 1 ;;
-  esac
+# Sets DW_PROJECT_DIR to the nearest directory with a project file, from <dir> upward,
+# since a session can run from a subfolder. Returns 1 if there is none. The first .git,
+# a folder or a worktree's file, is the repo's root and the last place to look, so a
+# nested repo doesn't take its parent's project file. Uses the shell alone.
+_dw_find_project() {
+  _dw_dir=$1
   while :; do
-    if _dw_has_project_file "$_dw_dir"; then
+    if _dw_exists "$_dw_dir/.claude/dev-workflow.json"; then
       DW_PROJECT_DIR=${_dw_dir:-/}
       return 0
     fi
-    [ -n "$_dw_dir" ] || return 1
-    _dw_dir=${_dw_dir%/*}
+    _dw_exists "$_dw_dir/.git" && return 1
+    # The root is the empty string here, and a relative path ends at its first name.
+    case $_dw_dir in
+      */*) _dw_dir=${_dw_dir%/*} ;;
+      *) return 1 ;;
+    esac
   done
+}
+
+# The same from the input's cwd, which has to be a full path.
+_dw_project_from_cwd() {
+  _dw_cwd=$(printf '%s' "$DW_INPUT" | jq -r '.cwd | strings' 2>/dev/null) || return 1
+  case $_dw_cwd in
+    /*) _dw_find_project "$_dw_cwd" ;;
+    *) return 1 ;;
+  esac
 }
 
 # Reads stdin, or the file named, and succeeds on exactly one JSON object. An empty file
@@ -89,9 +100,9 @@ _dw_is_one_object() {
 #   DW_PROJECT_FILE  its project file
 #   DW_INPUT         the hook input, which this has read from stdin
 dw_gate() {
-  DW_PROJECT_DIR=${CLAUDE_PROJECT_DIR:-}
-  if [ -n "$DW_PROJECT_DIR" ]; then
-    _dw_has_project_file "$DW_PROJECT_DIR" || exit 0
+  DW_PROJECT_DIR=
+  if [ -n "${CLAUDE_PROJECT_DIR:-}" ]; then
+    _dw_find_project "$CLAUDE_PROJECT_DIR" || exit 0
   fi
 
   if ! command -v jq >/dev/null 2>&1; then

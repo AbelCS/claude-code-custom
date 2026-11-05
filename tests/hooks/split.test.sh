@@ -165,6 +165,49 @@ expect 'case $x in y) a;; z) b;; esac' 'a' 'z' 'b'
 expect 'echo if then done fi' 'echo if then done fi'
 expect 'git commit -m done' 'git commit -m done'
 
+# A real command directly after a closer or a loop header isn't hidden by it.
+expect 'if (npm test) then gh pr merge 1; fi' 'npm test' 'gh pr merge 1'
+expect 'if { npm test; } then gh pr merge 1; fi' 'npm test' 'gh pr merge 1'
+expect 'while (a) do gh pr merge 1; done' 'a' 'gh pr merge 1'
+expect 'if a; then (b) else gh pr merge 1; fi' 'a' 'b' 'gh pr merge 1'
+expect 'if a; then { b; } else gh pr merge 1; fi' 'a' 'b' 'gh pr merge 1'
+expect 'case $x in (a) gh pr merge 1;; esac' 'gh pr merge 1'
+expect 'case $x in (a | b) gh pr merge 1;; esac && c' 'gh pr merge 1' 'c'
+expect 'for x do gh pr merge 1; done' 'gh pr merge 1'
+expect 'for ((i=0;i<1;i++)) do gh pr merge 1; done' 'gh pr merge 1'
+expect 'for ((i=0;i<1;i++)); do gh pr merge 1; done' 'gh pr merge 1'
+expect 'select x do gh pr merge 1; done' 'gh pr merge 1'
+expect "for x${nl}do gh pr merge 1; done" 'gh pr merge 1'
+expect '( a ) b' 'a' 'b'
+expect 'echo $(for x do a; done) b' 'a' 'echo $(for x do a; done) b'
+expect 'for x in $(if (a) then b; fi) c; do d; done' 'a' 'b' 'd'
+
+# Only redirections are dropped after a closer, with a target apart or attached.
+expect '( a ) 2>&1 > out | b' 'a' 'b'
+expect '{ a; } 2> err >> out && b' 'a' 'b'
+expect 'if a; then b; fi >&2; c' 'a' 'b' 'c'
+expect 'for x in 1; do a; done < <(b) && c' 'a' 'b' 'c'
+expect "( a ) <<EOF${nl}gh pr merge${nl}EOF${nl}b" 'a' 'b'
+expect 'while (a) > out do b; done' 'a' 'b'
+
+# A reserved word directly before a parenthesis is still that word.
+expect 'if(npm test);then gh pr merge 1;fi' 'npm test' 'gh pr merge 1'
+expect 'if a;then(b);else(c);fi' 'a' 'b' 'c'
+expect 'while(a)do gh pr merge 1;done' 'a' 'gh pr merge 1'
+expect 'for((i=0;i<1;i++))do gh pr merge 1;done' 'gh pr merge 1'
+expect '!(a) && b' 'a' 'b'
+expect '{(a);}' 'a'
+expect 'time(a)' 'a'
+expect 'iffy(a) && b' 'iffy(a)' 'b'
+expect '"if"(a) && b' '"if"(a)' 'b'
+
+# time is a keyword like !, with the one option it has.
+expect 'time npm test && gh pr merge 1' 'npm test' 'gh pr merge 1'
+expect 'time -p npm test' 'npm test'
+expect 'A=1 time a' 'a'
+expect '! time a' 'a'
+expect 'echo time -p' 'echo time -p'
+
 # --- Comments
 
 expect 'a # b && c' 'a'

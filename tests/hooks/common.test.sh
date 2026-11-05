@@ -162,6 +162,108 @@ assert_decision ask "$gate" "$(input_from "$repo")"
 project_dir "$bare"
 assert_decision none "$gate" "$(input_from "$repo")"
 
+# --- Finding the project from a subfolder: up to the first .git
+
+# assert_found_at <dir> <json>: exactly that directory, not one above or below it.
+assert_found_at() {
+  assert_decision ask "$gate" "$2"
+  found=$(reason_of "$gate" "$2")
+  [ "$found" = "through the gate to $1" ] || _assert_fail "expected the project at $1, got: $found"
+}
+
+tree="$(tmp_dir)/a b/git repo"
+new_project "$tree"
+mkdir "$tree/.git"
+mkdir -p "$tree/sub/deep"
+
+project_dir "$tree"
+assert_found_at "$tree" "$input"
+project_dir "$tree/sub"
+assert_found_at "$tree" "$input"
+project_dir "$tree/sub/deep"
+assert_found_at "$tree" "$input"
+no_project_dir
+assert_found_at "$tree" "$(input_from "$tree/sub/deep")"
+
+# A subfolder of a project needs jq like the root does.
+project_dir "$tree/sub"
+HOOK_PATH=$no_tools
+assert_decision deny "$gate" "$input"
+assert_contains "$(reason_of "$gate" "$input")" 'jq'
+unset HOOK_PATH
+
+# A broken project file above blocks from a subfolder too.
+broken_tree="$(tmp_dir)/a b/broken tree"
+new_project "$broken_tree" 'not json'
+mkdir -p "$broken_tree/sub"
+project_dir "$broken_tree/sub"
+assert_decision deny "$gate" "$input"
+assert_contains "$(reason_of "$gate" "$input")" "$broken_tree/.claude/dev-workflow.json"
+
+# stops_at_git <dir below or at the nested repo>: it doesn't take its parent's file,
+# from the variable or from cwd, and needs no tool to decide that.
+stops_at_git() {
+  project_dir "$1"
+  assert_decision none "$gate" "$input"
+  HOOK_PATH=$no_tools
+  assert_decision none "$gate" "$input"
+  HOOK_PATH=$fake_jq
+  assert_decision none "$gate" "$input"
+  unset HOOK_PATH
+  assert_exit 1 test -e "$scratch/jq ran"
+  no_project_dir
+  assert_decision none "$gate" "$(input_from "$1")"
+}
+
+# A nested repo, with a .git folder.
+nested="$tree/vendor/other"
+mkdir -p "$nested/.git" "$nested/src"
+stops_at_git "$nested"
+stops_at_git "$nested/src"
+
+# A worktree or submodule, where .git is a file.
+worktree="$tree/vendor/worktree"
+mkdir -p "$worktree/src"
+printf 'gitdir: /somewhere/else\n' >"$worktree/.git"
+stops_at_git "$worktree"
+stops_at_git "$worktree/src"
+
+# A .git that's a dangling link still marks a repo.
+linked="$tree/vendor/linked"
+mkdir -p "$linked/src"
+ln -s "$linked/nowhere" "$linked/.git"
+stops_at_git "$linked/src"
+
+# A nested repo with its own project file is its own project.
+own="$tree/vendor/own"
+mkdir -p "$own/.git" "$own/src"
+new_project "$own"
+project_dir "$own/src"
+assert_found_at "$own" "$input"
+
+# A .git between the start and the project file stops the walk, so a folder above the
+# repo holding a project file doesn't count.
+inner="$(tmp_dir)/a b/outer"
+new_project "$inner"
+mkdir -p "$inner/repo/.git"
+stops_at_git "$inner/repo"
+
+# With no .git at all the walk ends at the filesystem root, with no decision.
+project_dir "$bare/sub/deep"
+assert_decision none "$gate" "$input"
+HOOK_PATH=$no_tools
+assert_decision none "$gate" "$input"
+unset HOOK_PATH
+no_project_dir
+assert_decision none "$gate" "$(input_from "$bare/sub/deep")"
+assert_decision none "$gate" "$(input_from "/")"
+
+# A relative variable can't be walked past its start, and must still end.
+project_dir 'relative/path'
+assert_decision none "$gate" "$input"
+project_dir 'relative'
+assert_decision none "$gate" "$input"
+
 # --- Reading the hook input and the project file after the gate
 
 write_hook 'dw_gate
@@ -219,3 +321,43 @@ reason_comes_through ''
 write_hook 'dw_deny "ends in one
 "'
 assert_contains "$(sh "$script" </dev/null)" 'ends in one\n"'
+
+# --- The test helpers: output Claude Code can't read as a decision fails the test
+
+good='{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"r"}}'
+write_hook 'printf "%s\n" "$DW_TEST_OUTPUT"'
+
+not_a_decision() {
+  DW_TEST_OUTPUT=$1
+  export DW_TEST_OUTPUT
+  assert_exit 1 decision_of "$script" ''
+  assert_exit 1 reason_of "$script" ''
+  assert_exit 1 assert_decision deny "$script" ''
+  assert_exit 1 assert_decision none "$script" ''
+  printed=$(decision_of "$script" '' 2>/dev/null)
+  [ -z "$printed" ] || _assert_fail "decision_of printed [$printed] for: $1"
+  printed=$(reason_of "$script" '' 2>/dev/null)
+  [ -z "$printed" ] || _assert_fail "reason_of printed [$printed] for: $1"
+}
+not_a_decision "$good
+still running"
+not_a_decision "still running
+$good"
+not_a_decision "$good
+$good"
+not_a_decision 'plain text'
+not_a_decision '{}'
+not_a_decision '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"allow","permissionDecisionReason":"r"}}'
+not_a_decision '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny"}}'
+not_a_decision '{"hookSpecificOutput":{"hookEventName":"PostToolUse","permissionDecision":"deny","permissionDecisionReason":"r"}}'
+
+# The same helpers still pass what's right.
+DW_TEST_OUTPUT=$good
+assert_decision deny "$script" ''
+[ "$(reason_of "$script" '')" = 'r' ] || _assert_fail 'reason_of lost a good reason'
+
+# A hook that fails fails the test too, whatever it printed first.
+write_hook "printf '%s\\n' '$good'
+exit 3"
+assert_exit 1 decision_of "$script" ''
+assert_exit 1 assert_decision deny "$script" ''
