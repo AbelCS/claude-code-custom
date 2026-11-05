@@ -9,14 +9,15 @@
 # reason, as that worktree has to be removed before the branch can be.
 #
 # Only "delete" is a decision. It means a pull request from a branch of that name was
-# merged with exactly this tip, so nothing on the branch is lost. A squash merge looks
-# unmerged to git, which is why this asks GitHub rather than git. Everything else is
-# "keep": the current branch, the default branch, a branch with commits after its merged
-# pull request, one whose remote branch is gone with no merged pull request, and one
-# with no merged pull request at all.
+# merged into the default branch with exactly this tip, so nothing on the branch is
+# lost. A squash merge looks unmerged to git, which is why this asks GitHub rather than
+# git. Everything else is "keep": the current branch, the default branch, a branch whose
+# pull request merged into another base, such as an integration branch that may never
+# land, a branch with commits after its merged pull request, one whose remote branch is
+# gone with no merged pull request, and one with no merged pull request at all.
 #
 # It only reads: it deletes nothing. The merged pull requests come from
-#   gh pr list --state merged --json headRefName,headRefOid --limit 1000
+#   gh pr list --state merged --json headRefName,headRefOid,baseRefName --limit 1000
 # so a branch whose pull request is older than the last 1000 merged is kept, which is
 # safe. The default branch is the project file's defaultBranch, then origin's HEAD,
 # then main.
@@ -51,13 +52,14 @@ if [ -z "$default" ]; then
 fi
 [ -n "$default" ] || default=main
 
-prs=$(cd "$top" && "$GH" pr list --state merged --json headRefName,headRefOid --limit 1000) ||
+prs=$(cd "$top" && "$GH" pr list --state merged --json headRefName,headRefOid,baseRefName --limit 1000) ||
   die "gh couldn't list the merged pull requests. Is it signed in, and is origin on GitHub?"
-# "<name> <oid>" a line.
+# "<name> <oid> <base>" a line. A pull request with no base named can't be proven
+# merged into the default branch, so it never deletes.
 merged=$(printf '%s\n' "$prs" | jq -r '
   if type == "array" then .[] else error("not a list") end
   | select((.headRefName | type) == "string" and (.headRefOid | type) == "string")
-  | "\(.headRefName) \(.headRefOid)"' 2>/dev/null) ||
+  | "\(.headRefName) \(.headRefOid) \(.baseRefName | strings // "?")"' 2>/dev/null) ||
   die "gh's list of merged pull requests isn't a list"
 
 # "<branch> <path>" a line, for each branch checked out in a worktree.
@@ -78,9 +80,10 @@ while read -r ref tip track; do
   elif [ "$name" = "$default" ]; then
     action=keep reason="the default branch"
   else
-    oids=$(printf '%s\n' "$merged" | awk -v b="$name" '$1 == b { print $2 }')
+    # "<oid>:<base>" for each of its merged pull requests.
+    prs_of=$(printf '%s\n' "$merged" | awk -v b="$name" '$1 == b { print $2 ":" $3 }')
     action=keep
-    if [ -z "$oids" ]; then
+    if [ -z "$prs_of" ]; then
       if [ "$track" = "[gone]" ]; then
         reason="its remote branch is gone, but no pull request of it was merged"
       else
@@ -88,15 +91,22 @@ while read -r ref tip track; do
       fi
     else
       reason="its merged pull request had another tip"
-      for oid in $oids; do
+      elsewhere=
+      for pr in $prs_of; do
+        oid=${pr%%:*} base=${pr#*:}
         if [ "$oid" = "$tip" ]; then
-          action=delete reason="its pull request was merged at this tip"
-          break
-        fi
-        if git -C "$top" merge-base --is-ancestor "$oid" "$tip" 2>/dev/null; then
+          if [ "$base" = "$default" ]; then
+            action=delete reason="its pull request was merged into $default at this tip"
+            break
+          fi
+          elsewhere=$base
+        elif git -C "$top" merge-base --is-ancestor "$oid" "$tip" 2>/dev/null; then
           reason="it has commits after its merged pull request"
         fi
       done
+      if [ "$action" = keep ] && [ -n "$elsewhere" ]; then
+        reason="its pull request was merged into $elsewhere, not $default"
+      fi
     fi
   fi
 

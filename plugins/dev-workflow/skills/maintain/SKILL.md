@@ -18,7 +18,7 @@ Say "Using maintain to ..." first. A person starts this; it never runs on a sche
 
 ## 1. Branches
 
-Run `sh ${CLAUDE_PLUGIN_ROOT}/scripts/maintain/merged-branches.sh .`. It prints `<branch> delete|keep <reason>` a line, and changes nothing. Only `delete` is proven: a pull request from that branch was merged at exactly its tip.
+Run `sh ${CLAUDE_PLUGIN_ROOT}/scripts/maintain/merged-branches.sh .`. It prints `<branch> delete|keep <reason>` a line, and changes nothing. Only `delete` is proven: a pull request from that branch was merged into the default branch at exactly its tip. A merge into any other base, such as an integration branch, is `keep`.
 
 For each `delete`:
 

@@ -1,7 +1,7 @@
 #!/bin/sh
 # merged-branches.sh <root>: one "<branch> delete|keep <reason>" line per local branch.
-# Only a branch whose tip is the tip of a merged pull request of the same name is
-# deleted. The current and default branches are always kept, and a branch checked out
+# Only a branch whose tip is the tip of a pull request of the same name merged into the
+# default branch is deleted. The current and default branches are always kept, and a branch checked out
 # in another worktree names it. gh is a stub: no test reads a real repo's pull requests.
 
 ROOT=$(cd "$(dirname "$0")/../.." && pwd)
@@ -57,6 +57,7 @@ branch feat/5-open       # no pull request merged
 branch feat/6-current    # merged, but checked out here
 branch feat/7-worktree   # merged, and checked out in another worktree
 branch feat/8-kept-wt    # not merged, and checked out in another worktree
+branch feat/9-elsewhere  # merged at this tip, but into a branch that never landed
 
 git -C "$r" push -q -u origin feat/2-gone 2>/dev/null
 git -C "$r" push -q origin --delete feat/2-gone 2>/dev/null
@@ -79,17 +80,18 @@ wt_path=$(git -C "$wt" rev-parse --show-toplevel)
 wt8_path=$(git -C "$wt8" rev-parse --show-toplevel)
 
 # The merged pull requests, including a pull request merged from main itself, which
-# never makes main a branch to delete.
+# never makes main a branch to delete, and one merged into an integration branch.
 jq -n \
   --arg m1 "$(tip "$r" feat/1-merged)" --arg m3 "$merged_3" --arg m4 "$other" \
   --arg m6 "$(tip "$r" feat/6-current)" --arg m7 "$(tip "$r" feat/7-worktree)" \
-  --arg main "$(tip "$r" main)" '[
-    {headRefName: "feat/1-merged", headRefOid: $m1},
-    {headRefName: "feat/3-ahead", headRefOid: $m3},
-    {headRefName: "feat/4-moved", headRefOid: $m4},
-    {headRefName: "feat/6-current", headRefOid: $m6},
-    {headRefName: "feat/7-worktree", headRefOid: $m7},
-    {headRefName: "main", headRefOid: $main}
+  --arg m9 "$(tip "$r" feat/9-elsewhere)" --arg main "$(tip "$r" main)" '[
+    {headRefName: "feat/1-merged", headRefOid: $m1, baseRefName: "main"},
+    {headRefName: "feat/3-ahead", headRefOid: $m3, baseRefName: "main"},
+    {headRefName: "feat/4-moved", headRefOid: $m4, baseRefName: "main"},
+    {headRefName: "feat/6-current", headRefOid: $m6, baseRefName: "main"},
+    {headRefName: "feat/7-worktree", headRefOid: $m7, baseRefName: "main"},
+    {headRefName: "feat/9-elsewhere", headRefOid: $m9, baseRefName: "release/next"},
+    {headRefName: "main", headRefOid: $main, baseRefName: "main"}
   ]' >"$work/prs.json"
 
 run() { # <root>: the output, exit 0
@@ -118,7 +120,7 @@ out=$(run "$r")
 calls=$(cat "$work/calls")
 assert_contains "$calls" "pr list"
 assert_contains "$calls" "--state merged"
-assert_contains "$calls" "--json headRefName,headRefOid"
+assert_contains "$calls" "--json headRefName,headRefOid,baseRefName"
 assert_contains "$calls" "--limit"
 
 action_is "$out" feat/1-merged delete
@@ -137,6 +139,8 @@ assert_contains "$(line_for "$out" feat/7-worktree)" "worktree $wt_path"
 action_is "$out" feat/8-kept-wt keep
 assert_contains "$(line_for "$out" feat/8-kept-wt)" "worktree $wt8_path"
 assert_not_contains "$(line_for "$out" feat/1-merged)" "worktree"
+action_is "$out" feat/9-elsewhere keep
+assert_contains "$(line_for "$out" feat/9-elsewhere)" "into release/next, not main"
 
 # Every line is "<branch> delete|keep <reason>", and only proven ones are deletes.
 printf '%s\n' "$out" | awk '$2 != "delete" && $2 != "keep" || NF < 3 { bad = 1 } END { exit bad }' ||
@@ -168,6 +172,14 @@ printf '{ "schemaVersion": 1, "pluginVersion": "1.0.0", "defaultBranch": "feat/5
 out=$(run "$r")
 assert_contains "$(line_for "$out" feat/5-open)" "default"
 rm -r "$r/.claude"
+
+# --- the default branch from origin's HEAD: a merge into main no longer counts
+
+git -C "$r" symbolic-ref refs/remotes/origin/HEAD refs/remotes/origin/trunk
+out=$(run "$r")
+action_is "$out" feat/1-merged keep
+assert_contains "$(line_for "$out" feat/1-merged)" "into main, not trunk"
+git -C "$r" symbolic-ref -d refs/remotes/origin/HEAD
 
 # --- gh failing, or giving what isn't a list: an error, and no line at all
 

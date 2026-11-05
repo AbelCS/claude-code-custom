@@ -453,7 +453,7 @@ Each skill's body comes from the spec section named in its task. Evals are in Ta
 - Modify: `tests/skills/content.test.sh`
 
 **Interfaces:**
-- Produces: `merged-branches.sh <root>` prints `<branch> delete|keep <reason>` lines. It takes the pull request data from `gh pr list --state merged --json headRefName,headRefOid`, stubbed in tests through `DW_GH`.
+- Produces: `merged-branches.sh <root>` prints `<branch> delete|keep <reason>` lines. It takes the pull request data from `gh pr list --state merged --json headRefName,headRefOid,baseRefName`, deleting only a branch merged into the default branch, stubbed in tests through `DW_GH`.
 
 - [ ] **Step 1: Write the failing test.** A local branch whose tip matches a merged pull request gives `delete`. Remote gone but no merged pull request gives `keep`. Tip ahead of the merged pull request gives `keep`. The current branch and default branch are always `keep`. A worktree's branch is listed with its worktree. `maintain` has `disable-model-invocation: true` and names all six areas and `docs/maintenance.md`. `enable-releases` has `disable-model-invocation: true`, its template has `workflow_dispatch` and no `push` trigger, it adds the optional check to `ciAllowlist`, and it says to verify the action's current version.
 - [ ] **Step 2: Run it.** Expected: fails.

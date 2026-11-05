@@ -60,7 +60,11 @@ Astro has no database reset of its own. A database in the stack brings its own s
 
 ## End-to-end tests against a build
 
-Test what people get. Build first, then let Playwright's `webServer` serve the build with `npm run preview` on a port of its own, so it never collides with the owner's `astro dev`. `webServer.url` and `use.baseURL` share that port. Point the build at the isolated test stack through its environment, never the owner's data.
+Test what people get. Build first, then let Playwright's `webServer` serve the build on a port of its own, so it never collides with the owner's `astro dev`. `webServer.url` and `use.baseURL` share that port. Point the build at the isolated test stack through its environment, never the owner's data. What serves the build depends on the setup, as Astro 7.4.7 checks:
+
+- **A static build**, with every page prerendered, under any adapter or none: `npm run preview`.
+- **On-demand pages, with an adapter that has a preview server**, as `@astrojs/node` and `@astrojs/cloudflare` do: `npm run preview` too. With the Node adapter in standalone mode, `PORT=<port> node ./dist/server/entry.mjs` also runs the built server.
+- **On-demand pages with an adapter that has none**, such as `@astrojs/vercel` and `@astrojs/netlify`: `astro preview` exits with "adapter does not support the preview command". Use the adapter's own documented local server if it has one, or else run the tests against `astro dev` on its own port. That isn't the build, so it misses build-only failures and the host's behaviour: `verify` still runs `astro build`, and say in `AGENTS.md` that the end-to-end tests run against the dev server.
 
 ## With no database or sign-in
 

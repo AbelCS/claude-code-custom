@@ -15,7 +15,7 @@ Versions checked on 2026-11-06 against the CLI's releases and the Supabase docs:
 
 ## Its test tools
 
-- **Policies:** pgTAP files in `supabase/tests/`, made with `supabase test new <table>_rls` and run with `supabase test db`. One file per table, testing each role: `anon`, a signed-in owner and a signed-in stranger, through `set local role` and `request.jwt.claim.sub`. Pair every denied write with a read proving the row is intact. Each file runs in a transaction that rolls back.
+- **Policies:** pgTAP files in `supabase/tests/`, made with `supabase test new <table>_rls` and run against the test stack, never a bare `supabase test db`, which tests the default local stack: see below. One file per table, testing each role: `anon`, a signed-in owner and a signed-in stranger, through `set local role` and `request.jwt.claim.sub`. Pair every denied write with a read proving the row is intact. Each file runs in a transaction that rolls back.
 - **Helpers:** `basejump-supabase_test_helpers` adds `tests.create_supabase_user()`, `tests.authenticate_as()` and `tests.rls_enabled()`. The docs' advanced pgTAP guide installs it in a setup file run first.
 - **Complex reads:** tests through `supabase-js` against the test stack, signed in as a real test user, so they go through the same policies people do.
 
@@ -23,14 +23,14 @@ Versions checked on 2026-11-06 against the CLI's releases and the Supabase docs:
 
 Tests never touch the owner's local data. Give them a stack of their own, reset before each run:
 
-- With the CLI's stack commands, experimental since 2.119.0: `[experimental] stack = true` in `supabase/config.toml` and no fixed ports, then `supabase start --stack test` beside `supabase start --stack dev`. `supabase status --stack test --env` gives its URLs and keys. `db reset` takes no `--stack`, so reset it through its database URL: `supabase db reset --remote=<its DB_URL> --yes`.
-- Without them, a second project folder with its own `project_id` and ports, run with `--workdir`.
+- With the CLI's stack commands, experimental since 2.119.0: `[experimental] stack = true` in `supabase/config.toml` and no fixed ports, then `supabase start --stack test` beside `supabase start --stack dev`. `supabase status --stack test --env` gives its URLs and keys. Database commands take no `--stack`, and without a target they reach the default stack, so name the test stack through its database URL: `supabase db reset --remote=<its DB_URL> --yes`, then `supabase test db --remote=<its DB_URL> --yes`. v3 counts that URL as a remote, so `--yes` lets them run unattended. `--remote=<url>` replaces v2's `--db-url`, which still works with a warning until v4.
+- Without them, a second project folder with its own `project_id` and ports, every command naming it: `supabase db reset --workdir <folder>` and `supabase test db --workdir <folder>`.
 
 Put the reset and the run in one script, such as `scripts/test-db`, that resets only the test stack. The hooks hold a reset typed in a session for a person's yes, but not one inside that script. Suites sharing the test stack don't run at the same time.
 
 ## Reset commands
 
-These wipe a database. `supabase.resets`, next to this file, lists them for `databaseResetCommands`, and `setup` adds them to the project file: `supabase db reset`, `supabase migration down`, `supabase stop --no-backup` and `supabase stack destroy`, each also through `npx`. A project running the CLI another way, such as `pnpm exec supabase`, adds that form as its own. Never reset the owner's local database without asking.
+These wipe a database. `supabase.resets`, next to this file, lists them for `databaseResetCommands`, and `setup` adds them to the project file: `supabase db reset`, `supabase migration down`, `supabase stop --no-backup` and `supabase stack destroy`, each also through `npx`, and each matching its targeted forms too, such as `--remote=<url>` or `--workdir <folder>`. A project running the CLI another way, such as `pnpm exec supabase`, adds that form as its own. Never reset the owner's local database without asking.
 
 ## A read-only database MCP
 
@@ -60,7 +60,7 @@ The app's stack file gives most commands. Supabase adds:
 
 - `format`: SQL formatting, if the project has a formatter for it.
 - `check`: unchanged. It needs no database, so it stays fast.
-- `verify`: also runs `scripts/test-db`: the test stack reset, `supabase test db` against it, and the database tests.
+- `verify`: also runs `scripts/test-db`: the test stack reset, `supabase test db` with the test stack's `--remote=<its DB_URL> --yes` or `--workdir`, and the database tests.
 - `deadCode` and `audit`: unchanged, from the app's stack file.
-- `testCommands`: add `supabase test db` and `npx supabase test db`, and the test stack script.
+- `testCommands`: add `supabase test db` and `npx supabase test db`, which match their longer forms too, and the test stack script.
 - `databaseResetCommands`: comes from `supabase.resets`. Add only the project's own.
