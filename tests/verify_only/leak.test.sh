@@ -35,13 +35,16 @@ else
 fi
 
 # Keep the files in the arguments: unusual names survive, and grep gets them all
-# at once. A tracked symlink has only its name to search; its target is either
-# tracked itself or not part of the repo.
+# at once. Git commits a tracked symlink's target text as its content, so that
+# text is searched, and grep doesn't get the link, which it would follow.
+links=""
 set --
 while IFS= read -r path; do
   [ -n "$path" ] || continue
   if [ -L "$path" ]; then
-    continue
+    target=$(readlink "$path" 2>>"$errors") || echo "could not read link: $path" >>"$errors"
+    links="$links$path -> $target
+"
   elif [ -f "$path" ]; then
     set -- "$@" "$path"
   else
@@ -66,8 +69,9 @@ while read -r term; do
   # 0 is a match and 1 is none. Anything else, or anything on stderr, is an error.
   [ "$?" -le 1 ] || echo "grep failed on term: $term" >>"$errors"
   in_paths=$(printf '%s\n' "$paths" | grep -Fi -- "$term")
+  in_links=$(printf '%s' "$links" | grep -Fi -- "$term")
 
-  hits=$(printf '%s\n%s\n' "$in_contents" "$in_paths" | sort -u)
+  hits=$(printf '%s\n%s\n%s\n' "$in_contents" "$in_paths" "$in_links" | sort -u)
   while IFS= read -r hit; do
     [ -n "$hit" ] || continue
     leak_count=$((leak_count + 1))

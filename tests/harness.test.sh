@@ -529,11 +529,19 @@ if "$can_lock_files"; then
   git -C "$default_repo" rm -q -f locked/notes.md locked-file.md
 fi
 
-# A tracked symlink has no contents of its own to read, wherever it points, but
-# its name still counts.
+# Git commits a tracked symlink's target text as its content, so that text is
+# searched, whether or not it points at anything. The link's name counts too.
 ln -s docs "$default_repo/folder-link"
 ln -s missing "$default_repo/broken-link"
 git -C "$default_repo" add folder-link broken-link
+assert_exit 0 sh "$default_leak"
+ln -s /Users/ACME/secret "$default_repo/secret-link"
+git -C "$default_repo" add secret-link
+assert_exit 1 sh "$default_leak"
+output=$(sh "$default_leak" 2>&1)
+assert_contains "$output" "secret-link"
+assert_contains "$output" "contains \"acme\""
+git -C "$default_repo" rm -q -f secret-link
 assert_exit 0 sh "$default_leak"
 ln -s docs "$default_repo/acme-link"
 git -C "$default_repo" add acme-link
