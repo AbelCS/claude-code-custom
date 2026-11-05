@@ -33,6 +33,8 @@ Fix what they find, test first, and run verify again, on its own.
 
 Confirm `AGENTS.md` and the decision log are current in this pull request: new commands, layout, glossary terms, and each significant decision with its spec. If not, update them on this branch.
 
+If the project has a README or docs, check whether this change makes them out of date, and update them in this pull request too. If it is at 1.0.0 or later and has none, say so: a stable project gets a README and docs.
+
 ## 5. Pull request
 
 Push the branch, which runs `check` through `pre-push`. Then open the pull request with `gh pr create`:

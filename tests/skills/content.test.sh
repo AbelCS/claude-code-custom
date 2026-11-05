@@ -180,6 +180,9 @@ land|acceptance criteria
 land|no attribution
 land|GitHub MCP
 land|placeholder rather than a value
+land|README or docs
+land|out of date
+land|1.0.0 or later and has none
 independent-review|${user_config.reviewer_command}
 independent-review|${user_config.reviewer_name}
 independent-review|Announce
@@ -304,6 +307,7 @@ maintain|- YYYY-MM-DD: what was done
 maintain|${user_config.maintenance_interval_days}
 maintain|money rules or permissions
 maintain|placeholder rather than a value
+maintain|1.0.0 or later has a README and docs
 enable-releases|github.com
 enable-releases|Conventional Commits
 enable-releases|Stop and ask before overwriting
@@ -325,4 +329,6 @@ enable-releases|GITHUB_TOKEN
 enable-releases|Allow GitHub Actions to create and approve pull requests
 enable-releases|${CLAUDE_SKILL_DIR}/templates/
 enable-releases|Existing workflows
+enable-releases|reaches 1.0.0
+enable-releases|README and docs
 TABLE

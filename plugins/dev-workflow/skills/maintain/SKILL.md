@@ -51,6 +51,7 @@ Run `/simplify` and `/code-review` on those files, and check each finding agains
 ## 5. Docs
 
 - `AGENTS.md`, the README and the decision log against the code: commands, layout, glossary and decisions that drifted.
+- A project at 1.0.0 or later has a README and docs, and they match the code. If they're missing, write them in this area's pull request.
 - Finished plans in `docs/superpowers/plans/`: work that has landed, with its issue closed. Mark each finished at its top.
 - Issues met but still open: check each one's acceptance criteria against the code. Close those met, with a comment naming the pull request that met them. Leave the rest, saying what's missing.
 
