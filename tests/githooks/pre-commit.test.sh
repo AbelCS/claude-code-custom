@@ -1,0 +1,704 @@
+#!/bin/sh
+# Tests the pre-commit template, installed in a temp repo the way setup installs it
+# and run by real commits, so git decides what the hook sees.
+
+ROOT=$(cd "$(dirname "$0")/../.." && pwd)
+# shellcheck source=tests/lib/assert.sh
+. "$ROOT/tests/lib/assert.sh"
+
+templates="$ROOT/plugins/dev-workflow/skills/setup/templates/githooks"
+
+# The owner's own git settings must not change a result.
+GIT_CONFIG_GLOBAL=/dev/null
+GIT_CONFIG_NOSYSTEM=1
+export GIT_CONFIG_GLOBAL GIT_CONFIG_NOSYSTEM
+
+# --- The template
+
+# Git silently skips a hook that isn't executable.
+assert_exit 0 test -x "$templates/pre-commit"
+assert_exit 1 grep -Ewq 'jq|node|python3?' "$templates/pre-commit"
+
+# --- The fixture: a path with a space, because git passes hooks that path
+
+scratch=$(tmp_dir)
+repo="$(tmp_dir)/a b/repo"
+new_repo "$repo"
+hooks="$repo/.githooks"
+mkdir -p "$hooks"
+cp "$templates/pre-commit" "$templates/dw-lib.sh" "$hooks/"
+git -C "$repo" config core.hooksPath .githooks
+
+# The formatter fails on any file containing BAD, and logs each argument on one line,
+# so that a split or merged argument shows. It's named by how it was called.
+FMT_LOG="$scratch/formatter log"
+export FMT_LOG
+cat >"$repo/fmt" <<'FMT'
+#!/bin/sh
+status=0
+for file in "$@"; do
+  printf '%s[%s]\n' "$(basename "$0")" "$file" >>"$FMT_LOG"
+  case $file in --*) continue ;; esac
+  grep -q BAD "$file"
+  [ $? -eq 1 ] || status=1
+done
+exit $status
+FMT
+chmod +x "$repo/fmt"
+cp "$repo/fmt" "$repo/fmt2"
+
+# Nothing the fixture itself needs is ever staged or cleaned away.
+printf '.githooks\nfmt\nfmt2\n' >>"$repo/.git/info/exclude"
+
+write_env() { # <formatters> <allowlist>
+  cat >"$hooks/dev-workflow.env" <<ENV
+DW_DEFAULT_BRANCH='main'
+DW_CHECK='scripts/check'
+DW_CI_ALLOWLIST='$2'
+DW_FORMATTERS='$1'
+ENV
+}
+
+attempt() {
+  git -C "$repo" commit -q -m 'feat: x' "$@"
+}
+
+blocks() { # <text the hook must print>...: and it was the hook.
+  assert_exit 1 attempt
+  blocked=$(attempt 2>&1)
+  assert_contains "$blocked" 'pre-commit: '
+  for text in "$@"; do
+    assert_contains "$blocked" "$text"
+  done
+}
+
+stage() { # <path> <content>
+  mkdir -p "$(dirname "$repo/$1")"
+  printf '%s\n' "$2" >"$repo/$1"
+  git -C "$repo" --literal-pathspecs add -- "$1"
+}
+
+log_is() { # <expected log>
+  log_found=$(cat "$FMT_LOG" 2>/dev/null)
+  assert_exit 0 test "$log_found" = "$1"
+}
+
+# --- The first commit has no HEAD to compare with
+
+write_env '*.rs|./fmt' ''
+stage a.rs 'BAD'
+blocks 'a.rs'
+stage a.rs 'clean'
+assert_exit 0 attempt
+base=$(git -C "$repo" rev-parse HEAD)
+
+fresh() { # Back to the first commit, with an empty log.
+  git -C "$repo" reset -q --hard "$base" || _assert_fail "could not reset the fixture"
+  git -C "$repo" clean -fdq || _assert_fail "could not clean the fixture"
+  rm -f "$FMT_LOG"
+}
+
+# --- Formatting
+
+fresh
+stage b.rs 'BAD'
+blocks 'b.rs' './fmt'
+
+fresh
+stage b.rs 'clean'
+assert_exit 0 attempt
+log_is 'fmt[b.rs]'
+
+# A file no formatter claims.
+fresh
+stage b.ts 'BAD'
+assert_exit 0 attempt
+log_is ''
+
+# Nothing staged, including for a rule that would match anything.
+for rule in '*.rs|./fmt' '*|./fmt'; do
+  write_env "$rule" ''
+  fresh
+  assert_exit 0 attempt --allow-empty
+  log_is ''
+done
+
+# Each formatter gets its own files, all at once.
+write_env '*.rs|./fmt
+*.ts|./fmt2' ''
+fresh
+stage b.rs 'clean'
+stage c.ts 'clean'
+stage d.rs 'clean'
+stage e.md 'BAD'
+assert_exit 0 attempt
+log_is 'fmt[b.rs]
+fmt[d.rs]
+fmt2[c.ts]'
+
+# Only the formatter that failed is named, with its files.
+fresh
+stage b.rs 'clean'
+stage c.ts 'BAD'
+blocks 'c.ts' './fmt2'
+assert_not_contains "$blocked" 'b.rs'
+
+# Both are run, so one commit shows everything to fix.
+fresh
+stage b.rs 'BAD'
+stage c.ts 'BAD'
+blocks 'b.rs' 'c.ts'
+
+# A rule can have arguments, which come before the files.
+write_env '*.rs|./fmt --check --mode=x' ''
+fresh
+stage b.rs 'clean'
+assert_exit 0 attempt
+log_is 'fmt[--check]
+fmt[--mode=x]
+fmt[b.rs]'
+
+# A formatter that reads stdin can't take the rest of the rules from the hook.
+cat >"$repo/fmt-stdin" <<'FMT'
+#!/bin/sh
+cat >/dev/null
+FMT
+chmod +x "$repo/fmt-stdin"
+printf 'fmt-stdin\n' >>"$repo/.git/info/exclude"
+write_env '*.rs|./fmt-stdin
+*.rs|./fmt' ''
+fresh
+stage b.rs 'clean'
+stage c.rs 'clean'
+assert_exit 0 attempt
+log_is 'fmt[b.rs]
+fmt[c.rs]'
+
+# File names reach the formatter as they are, as one argument each.
+write_env '*.rs|./fmt' ''
+accented=$(printf 'caf\303\251.rs')
+# shellcheck disable=SC2016 # The dollar is part of the name.
+for name in 'a b.rs' 'two  spaces.rs' "$accented" 'quo"te.rs' "apos'trophe.rs" 'back\slash.rs' 'do$lar.rs' 'tab	bed.rs' 'star*.rs'; do
+  fresh
+  stage "$name" 'clean'
+  assert_exit 0 attempt
+  log_is "fmt[$name]"
+  fresh
+  stage "$name" 'BAD'
+  blocks "$name"
+done
+
+# A name can't pass as one of the formatter's options.
+fresh
+stage '-b.rs' 'BAD'
+blocks '-b.rs'
+fresh
+stage '-b.rs' 'clean'
+assert_exit 0 attempt
+log_is 'fmt[./-b.rs]'
+
+# A line break can't survive the hook's file list, so it says so and doesn't guess.
+fresh
+newline_name='new
+line.rs'
+stage "$newline_name" 'clean'
+blocks 'line break'
+
+# The glob matches at any depth, and the formatter runs from the top of the repo.
+fresh
+stage 'src/deep/b.rs' 'clean'
+assert_exit 0 git -C "$repo/src/deep" commit -q -m 'feat: x'
+log_is 'fmt[src/deep/b.rs]'
+
+# Only staged files: another changed file isn't checked.
+fresh
+printf 'BAD\n' >"$repo/a.rs"
+stage b.rs 'clean'
+assert_exit 0 attempt
+log_is 'fmt[b.rs]'
+
+# What `commit -a` and `commit <path>` will commit counts as staged. Git gives the hook
+# another index for these, so a look at the normal one would miss them.
+fresh
+printf 'BAD\n' >"$repo/a.rs"
+assert_exit 1 attempt -a
+assert_contains "$(attempt -a 2>&1)" 'a.rs'
+assert_exit 1 attempt a.rs
+assert_contains "$(attempt a.rs 2>&1)" 'a.rs'
+
+# A deleted file has nothing to format.
+fresh
+git -C "$repo" rm -q a.rs
+assert_exit 0 attempt
+log_is ''
+
+# A renamed file is checked under its new name only.
+fresh
+git -C "$repo" mv a.rs renamed.rs
+assert_exit 0 attempt
+log_is 'fmt[renamed.rs]'
+
+fresh
+git -C "$repo" mv a.rs renamed.rs
+printf 'BAD\n' >"$repo/renamed.rs"
+git -C "$repo" add renamed.rs
+blocks 'renamed.rs'
+
+# A formatter works on the file on disk, which may not be what's staged. Both ways
+# round, the hook says so.
+fresh
+stage b.rs 'BAD'
+printf 'clean\n' >"$repo/b.rs"
+warned=$(attempt 2>&1) || _assert_fail "expected the commit to pass: $warned"
+assert_contains "$warned" 'warning'
+assert_contains "$warned" 'b.rs'
+
+fresh
+stage b.rs 'clean'
+printf 'BAD\n' >"$repo/b.rs"
+blocks 'b.rs' 'warning'
+
+# No warning when disk and index agree.
+fresh
+stage b.rs 'clean'
+assert_not_contains "$(attempt 2>&1)" 'warning'
+
+# A file staged but gone from disk can't be checked.
+fresh
+stage b.rs 'clean'
+rm "$repo/b.rs"
+blocks 'b.rs' 'warning'
+
+# A formatter that can't run blocks: it checked nothing.
+write_env '*.rs|./no-such-formatter' ''
+fresh
+stage b.rs 'clean'
+blocks 'b.rs' './no-such-formatter'
+
+# A rule the hook can't read blocks, even for a commit it wouldn't apply to.
+for bad_rule in 'no separator' '|./fmt' '*.rs|'; do
+  write_env "$bad_rule" ''
+  fresh
+  stage b.ts 'clean'
+  blocks 'DW_FORMATTERS' "$bad_rule"
+done
+
+# Blank lines are nothing to worry about.
+write_env '
+*.rs|./fmt
+
+' ''
+fresh
+stage b.rs 'clean'
+assert_exit 0 attempt
+log_is 'fmt[b.rs]'
+
+# --- CI triggers
+
+workflow=.github/workflows/x.yml
+allowed=.github/workflows/release.yml
+write_env '' "$allowed
+.github/workflows/other.yml"
+
+workflow_blocks() { # <trigger> <file content>
+  fresh
+  stage "$workflow" "$2"
+  blocks "$workflow" "has a $1 trigger"
+}
+
+workflow_passes() { # <file content>
+  fresh
+  stage "$workflow" "$1"
+  assert_exit 0 attempt
+}
+
+jobs='jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo hi'
+
+# Scalars.
+workflow_blocks pull_request 'on: pull_request'
+workflow_blocks pull_request_target 'on: pull_request_target'
+workflow_blocks push 'on: push'
+workflow_blocks push 'on: "push"'
+workflow_blocks push "on: 'push'"
+workflow_blocks push 'on: push # for now'
+workflow_blocks push '"on": push'
+workflow_blocks push "'on': push"
+workflow_blocks push 'on : push'
+workflow_blocks push 'on:	push'
+workflow_blocks push "name: x
+
+# A comment
+on: push
+$jobs"
+workflow_blocks push 'on:
+  push'
+workflow_blocks push '---
+on: push'
+workflow_blocks push 'on: &triggers push'
+workflow_blocks push 'on: !!str push'
+
+# Flow sequences.
+workflow_blocks push 'on: [push]'
+workflow_blocks push 'on: [ workflow_dispatch, push ]'
+workflow_blocks pull_request 'on: ["workflow_dispatch", "pull_request"]'
+workflow_blocks pull_request "on: ['pull_request']"
+workflow_blocks push 'on: [push] # for now'
+workflow_blocks push 'on:
+  [push]'
+workflow_blocks push "on: [
+  workflow_dispatch,
+  push,
+]
+$jobs"
+workflow_blocks push 'on: &triggers [push]'
+
+# Flow maps.
+workflow_blocks pull_request 'on: { pull_request: {} }'
+workflow_blocks pull_request 'on: {pull_request: {}}'
+workflow_blocks pull_request 'on: {pull_request:{}}'
+workflow_blocks pull_request 'on: {"pull_request": null}'
+workflow_blocks push 'on: { push }'
+workflow_blocks push 'on: { push: { branches: [main] } }'
+workflow_blocks push 'on: { workflow_dispatch: { inputs: { a: {} } }, push: {} }'
+workflow_blocks push "on: {
+  workflow_dispatch: {},
+  # A comment
+  push: {
+    branches: [main]
+  }
+}
+$jobs"
+
+# Block maps.
+workflow_blocks push "on:
+  push:
+$jobs"
+workflow_blocks push "on:
+  push:
+    branches: [main]
+$jobs"
+workflow_blocks pull_request "on:
+  workflow_dispatch:
+  pull_request:
+    types: [opened]
+$jobs"
+workflow_blocks pull_request_target "on:
+    # A comment
+    pull_request_target: {}
+$jobs"
+workflow_blocks push 'on:
+  "push":'
+workflow_blocks push 'on:
+  push : {}'
+workflow_blocks push "on: # all of these
+
+  # A comment
+  schedule:
+    - cron: '0 0 * * *'
+
+  push:
+$jobs"
+
+# Block sequences, which YAML lets sit at the same indent as their key.
+workflow_blocks push "on:
+  - workflow_dispatch
+  - push
+$jobs"
+workflow_blocks push "on:
+- workflow_dispatch
+- push
+$jobs"
+workflow_blocks push 'on:
+  - "push" # for now'
+
+# A file indented as a whole, a BOM and Windows line endings are all still YAML.
+workflow_blocks push '  name: x
+  on: push'
+workflow_blocks push "$(printf '\357\273\277on: push')"
+workflow_blocks push "$(printf 'name: x\r\non: push\r')"
+workflow_blocks push "$(printf 'on:\r\n  push:\r\n    branches: [main]\r')"
+workflow_blocks push "$(printf 'on: [\r\n  push\r\n]\r')"
+
+# Allowed triggers.
+workflow_passes 'on: workflow_dispatch'
+workflow_passes "on: workflow_dispatch
+$jobs"
+workflow_passes 'on: [workflow_dispatch, schedule]'
+workflow_passes 'on: { workflow_dispatch: {} }'
+workflow_passes "on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 0 * * *'
+$jobs"
+workflow_passes "on:
+- workflow_dispatch
+$jobs"
+workflow_passes 'on:'
+workflow_passes "name: no trigger at all
+$jobs"
+
+# Other triggers that only start the same.
+workflow_passes 'on: pull_request_review'
+workflow_passes 'on: [pull_request_review_comment, pushed]'
+workflow_passes 'on: { pull_request_review: {} }'
+workflow_passes 'on:
+  pull_request_review:
+  pushes:'
+
+# The words elsewhere in a workflow.
+workflow_passes "name: push
+on: workflow_dispatch
+jobs:
+  push:
+    name: pull_request
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push'
+    steps:
+      - name: push
+        run: git push
+      - name: on push
+        run: echo 'on: push'
+      - run: |
+          on: push
+          push:
+          pull_request:
+      - uses: some/action@v1
+        with:
+          on: push
+          push: true"
+workflow_passes 'name: |
+  on: push
+on: workflow_dispatch'
+workflow_passes 'env:
+  on: push
+on: workflow_dispatch'
+# A job comes after the triggers, at the indent of a list that has ended.
+workflow_passes 'on:
+- workflow_dispatch
+push:
+- not a trigger'
+
+# Names further down inside a trigger aren't triggers.
+workflow_passes "on:
+  workflow_dispatch:
+    inputs:
+      push:
+        description: push it
+      pull_request:
+        type: string
+$jobs"
+workflow_passes 'on:
+  workflow_run:
+    workflows: [push]
+    types:
+      - push'
+workflow_passes 'on: { workflow_dispatch: { inputs: { push: {}, pull_request: { type: string } } } }'
+workflow_passes 'on: { workflow_dispatch: push }'
+workflow_passes 'on: [ [push] ]'
+
+# Inside quotes, brackets and commas are text.
+workflow_passes 'on: [ "a, push" ]'
+workflow_passes "on: { 'a, push': {} }"
+workflow_blocks push 'on: [ "]", push ]'
+workflow_blocks push "on: { '}': {}, push: {} }"
+workflow_blocks push 'on: [ "a\", b]", push ]'
+
+# Comments don't count.
+workflow_passes '# on: push
+on: workflow_dispatch'
+workflow_passes 'on: workflow_dispatch # or push
+# push:'
+workflow_passes "on:
+  # push:
+  workflow_dispatch: # push:
+    # pull_request:
+$jobs"
+workflow_passes 'on:
+  # - push
+  - workflow_dispatch
+  # - pull_request'
+workflow_passes 'on: [
+  # push,
+  workflow_dispatch # , push
+]'
+workflow_passes 'on: {
+  # push: {},
+  workflow_dispatch: {} # , push: {}
+}'
+
+# It's the staged copy that counts, not the one on disk, either way round.
+fresh
+stage "$workflow" 'on: push'
+printf 'on: workflow_dispatch\n' >"$repo/$workflow"
+blocks "$workflow" push
+fresh
+stage "$workflow" 'on: workflow_dispatch'
+printf 'on: push\n' >"$repo/$workflow"
+assert_exit 0 attempt
+
+# Both extensions, and only real workflows: GitHub ignores any deeper or elsewhere.
+fresh
+stage .github/workflows/x.yaml 'on: push'
+blocks .github/workflows/x.yaml push
+for elsewhere in .github/workflows/sub/x.yml .github/x.yml docs/.github/workflows/x.yml x.yml .github/workflows/x.txt; do
+  fresh
+  stage "$elsewhere" 'on: push'
+  assert_exit 0 attempt
+done
+
+# A workflow name with a space.
+fresh
+stage '.github/workflows/a b.yml' 'on: push'
+blocks '.github/workflows/a b.yml' push
+
+# The allowlist takes exact paths.
+fresh
+stage "$allowed" 'on: push'
+assert_exit 0 attempt
+for near in .github/workflows/lease.yml .github/workflows/release.yml.yml .github/workflows/elease.yml; do
+  fresh
+  stage "$near" 'on: push'
+  blocks "$near" push
+done
+
+# Deleting a workflow is fine, and removes the problem.
+trigger_base=$base
+fresh
+stage "$workflow" 'on: workflow_dispatch'
+assert_exit 0 attempt
+printf 'on: push\n' >"$repo/$workflow"
+git -C "$repo" add "$workflow"
+git -C "$repo" commit -q --no-verify -m 'feat: push trigger'
+base=$(git -C "$repo" rev-parse HEAD)
+fresh
+git -C "$repo" rm -q "$workflow"
+assert_exit 0 attempt
+
+# So is moving it out of the workflows folder, whichever way git is set to see a move.
+for renames in true false; do
+  fresh
+  mkdir -p "$repo/docs"
+  git -C "$repo" mv "$workflow" docs/x.yml
+  assert_exit 0 git -C "$repo" -c "diff.renames=$renames" commit -q -m 'feat: x'
+done
+
+# Moving it to another name inside the folder is checked at the new name.
+fresh
+git -C "$repo" mv "$workflow" .github/workflows/moved.yml
+blocks .github/workflows/moved.yml push
+
+# On to the allowlist it passes, off the allowlist it doesn't.
+fresh
+git -C "$repo" mv "$workflow" "$allowed"
+assert_exit 0 attempt
+base=$(git -C "$repo" rev-parse HEAD)
+fresh
+git -C "$repo" mv "$allowed" .github/workflows/moved.yml
+blocks .github/workflows/moved.yml push
+
+# A file moved in from elsewhere is new to the folder.
+base=$trigger_base
+fresh
+stage docs/x.yml 'on: push'
+assert_exit 0 attempt
+base=$(git -C "$repo" rev-parse HEAD)
+fresh
+mkdir -p "$repo/.github/workflows"
+git -C "$repo" mv docs/x.yml "$workflow"
+blocks "$workflow" push
+base=$trigger_base
+
+# --- A broken env file blocks, and a missing one warns and checks what it still can
+
+# Missing: formatters can't run, and the workflow check works with no allowlist. A
+# value in the caller's environment isn't the project's allowlist.
+rm "$hooks/dev-workflow.env"
+fresh
+stage b.rs 'BAD'
+warned=$(env 'DW_FORMATTERS=*.rs|./fmt' git -C "$repo" commit -q -m 'feat: x' 2>&1) ||
+  _assert_fail "expected the commit to pass: $warned"
+assert_contains "$warned" 'dev-workflow.env'
+assert_contains "$warned" 'warning'
+log_is ''
+
+fresh
+stage "$workflow" 'on: push'
+blocks "$workflow" push 'dev-workflow.env' 'warning'
+
+fresh
+stage "$allowed" 'on: push'
+blocks "$allowed" push
+fresh
+stage "$allowed" 'on: push'
+assert_exit 1 env "DW_CI_ALLOWLIST=$allowed" git -C "$repo" commit -q -m 'feat: x'
+
+fresh
+stage "$workflow" 'on: workflow_dispatch'
+assert_exit 0 attempt
+
+fresh
+warned=$(attempt --allow-empty 2>&1)
+assert_contains "$warned" 'warning'
+
+# Broken: nobody knows what it held, so nothing passes, not even an empty commit.
+for broken in syntax failing unreadable; do
+  write_env '*.rs|./fmt' ''
+  case $broken in
+    syntax) printf "DW_CHECK='unterminated\n" >"$hooks/dev-workflow.env" ;;
+    failing) printf 'DW_CHECK=x\nfalse\n' >"$hooks/dev-workflow.env" ;;
+    unreadable) chmod 000 "$hooks/dev-workflow.env" ;;
+  esac
+  fresh
+  assert_exit 1 attempt --allow-empty
+  blocked=$(attempt --allow-empty 2>&1)
+  assert_contains "$blocked" 'pre-commit: '
+  assert_contains "$blocked" 'dev-workflow.env'
+  assert_not_contains "$blocked" 'warning'
+  log_is ''
+  chmod 644 "$hooks/dev-workflow.env"
+done
+
+# No warning at all when the file is there.
+write_env '' ''
+fresh
+assert_not_contains "$(attempt --allow-empty 2>&1)" 'warning'
+
+# --- When git itself fails, the hook can't say the commit is clean
+
+# Git puts its own folder first on a hook's PATH, so this runs the hook directly.
+shim="$scratch/shim"
+mkdir -p "$shim"
+real_git=$(command -v git)
+cat >"$shim/git" <<SHIM
+#!/bin/sh
+if [ "\$1" = "\$FAIL_GIT" ]; then
+  echo 'git failed for the test' >&2
+  exit 128
+fi
+exec "$real_git" "\$@"
+SHIM
+chmod +x "$shim/git"
+
+run_hook_failing_git() { # <git command to fail>
+  (cd "$repo" && PATH="$shim:$PATH" FAIL_GIT=$1 .githooks/pre-commit)
+}
+
+write_env '' ''
+fresh
+stage "$workflow" 'on: workflow_dispatch'
+assert_exit 0 run_hook_failing_git none
+assert_exit 1 run_hook_failing_git diff
+assert_contains "$(run_hook_failing_git diff 2>&1)" 'pre-commit: '
+assert_exit 1 run_hook_failing_git show
+assert_contains "$(run_hook_failing_git show 2>&1)" "$workflow"
+
+# --- A missing library can't check anything, so it blocks, and says why
+
+fresh
+rm "$hooks/dw-lib.sh"
+assert_exit 1 attempt --allow-empty
+assert_contains "$(attempt --allow-empty 2>&1)" 'dw-lib.sh is missing'
