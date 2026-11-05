@@ -30,7 +30,7 @@ Tools needed: `git`, `gh`, `jq`, `uvx` and `claude` (Claude Code 2.1.295 or late
 | `plugins/dev-workflow/` | The plugin being built, shipped to users |
 | `plugins/web-dev-workflow/` | The older plugin it replaces |
 | `.claude/dev-workflow.json` | Facts about this repo for the plugin's hooks |
-| `.githooks/` | This repo's git hooks |
+| `.githooks/` | This repo's git hooks: copies of the plugin's templates, plus their settings in `dev-workflow.env` |
 | `scripts/` | `check` and `verify` |
 | `tests/` | Tests, with helpers in `tests/lib/`. They never ship in a plugin. |
 | `docs/superpowers/specs/`, `docs/superpowers/plans/` | Approved specs and plans |
@@ -80,7 +80,7 @@ Tools needed: `git`, `gh`, `jq`, `uvx` and `claude` (Claude Code 2.1.295 or late
 ## Testing
 
 - Test first: every feature, bug fix, refactor and behaviour change.
-- Tests run locally through git hooks. `commit-msg` checks the format and rejects attribution. `pre-push` blocks direct pushes to `main`, except a new repo's first push, and runs `scripts/check`.
+- Tests run locally through git hooks. `pre-commit` checks the formatting of staged files and blocks a workflow that gains a per-PR trigger. `commit-msg` checks the format, requires the issue number on a `<type>/<issue>-<slug>` branch and rejects attribution. `pre-push` blocks direct pushes to `main`, except a new repo's first push, and runs `scripts/check`. That runs on the checkout, so `pre-push` fails if a pushed ref isn't what's checked out, and warns if the work tree has uncommitted changes.
 - CI runs only for releases. Never add per-PR pipelines.
 - A flaky test is a bug until proven otherwise: find the root cause before rerunning or retrying. Only rerun for a proven environmental cause, such as the laptop sleeping, and say so.
 

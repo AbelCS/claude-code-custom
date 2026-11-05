@@ -1,32 +1,81 @@
 #!/bin/sh
-# Starter hook, replaced by the plugin's template: checks the commit message
-# format and rejects AI attribution. Git runs it as: commit-msg <message file>
+# Checks the commit message format, the issue number and AI attribution.
+# Git runs it as: commit-msg <message file>
 
-# Bytes, so a footer's leading emoji counts as not being a letter or digit.
+# Bytes, so that text in any encoding matches the same way.
 LC_ALL=C
 export LC_ALL
+
+hook_dir=$(dirname "$0")
+if [ ! -r "$hook_dir/dw-lib.sh" ]; then
+  printf 'commit-msg: %s/dw-lib.sh is missing: run the setup skill to restore it\n' "$hook_dir" >&2
+  exit 1
+fi
+# shellcheck source-path=SCRIPTDIR source=dw-lib.sh
+. "$hook_dir/dw-lib.sh"
 
 reject() {
   printf 'commit-msg: %s\n' "$*" >&2
   exit 1
 }
 
-# Git passes comments and the diff of `commit -v` too, and removes them later.
-message=$(sed -e '/^# -* >8 -*$/,$d' -e '/^#/d' "$1") || reject "could not read $1"
+# None of the checks here use the env file, and a missing one must not stop every
+# commit in the repo. So this warns, while pre-push, which does need it, still fails.
+if ! dw_load_env; then
+  echo 'commit-msg: warning: still checking the format, issue number and attribution' >&2
+fi
+
+# Prints what git treats as the start of a comment line. "auto" means git chose one
+# for this commit: the scissors line shows it, and without one # is the likely choice.
+comment_string() {
+  comment_config=$(git config --get-regexp '^core\.comment(char|string)$' 2>/dev/null | tail -n 1 | cut -d ' ' -f 2-)
+  case $comment_config in
+    '') printf '#' ;;
+    auto)
+      comment_auto=$(sed -n 's/^\([#;@!$%^&|:]\) -\{24\} >8 -\{24\}$/\1/p' "$1" | tail -n 1)
+      printf '%s' "${comment_auto:-#}"
+      ;;
+    *) printf '%s' "$comment_config" ;;
+  esac
+}
+
+# Prints the message as git will keep it: git passes comments and the diff of
+# `commit -v` to this hook, and removes them with any trailing space afterwards. Git
+# only cuts at the exact scissors line, so anything looser would hide what it keeps.
+message_text() {
+  COMMENT=$(comment_string "$1") awk '
+    BEGIN { comment = ENVIRON["COMMENT"] }
+    $0 == comment " ------------------------ >8 ------------------------" { exit }
+    index($0, comment) == 1 { next }
+    { sub(/[ \t\r\f\v]+$/, ""); print }
+  ' "$1"
+}
+
+message=$(message_text "$1") || reject "could not read $1"
 subject=$(printf '%s\n' "$message" | sed -n '/[^[:space:]]/{p;q;}')
 
-types='feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert'
 printf '%s\n' "$subject" |
-  grep -Eq "^((fixup|squash)! )?($types)(\([^)]+\))?!?: .*[^ ] \(#[0-9]+\)$" ||
-  reject "expected \"<type>(<scope>): <subject> (#<issue>)\", got: $subject"
+  grep -Eq "^((fixup|squash|amend)! )*($DW_COMMIT_TYPES)(\\([^)]+\\))?!?: [^ ]" ||
+  reject "expected \"<type>(<scope>): <subject>\", got: $subject"
 
-# A co-author is an AI when the name is only a tool's, or the address a vendor's.
-# People can share a name with a tool, so a longer name with another address passes.
-tools='claude|copilot|chatgpt|codex|gemini|cursor|aider|devin'
-vendors='anthropic\.com|openai\.com|cursor\.com|aider\.chat'
-attribution="^co-authored-by:[[:space:]]*(github )?($tools)( code| cli| agent)?[[:space:]]*(<|$)"
-attribution="$attribution|^co-authored-by:.*@($vendors)"
-attribution="$attribution|^[^[:alnum:]]*(generated|written) (with|by) .*($tools)"
-if printf '%s\n' "$message" | grep -Eiq "$attribution"; then
-  reject "AI attribution isn't allowed: remove the line naming the tool"
-fi
+# Fixups are folded into another commit, and name it instead. A detached HEAD, as in
+# a rebase, gives no branch and so no issue.
+branch=$(git symbolic-ref -q HEAD)
+issue=$(dw_issue_from_branch "${branch#refs/heads/}")
+case $subject in
+  fixup!\ * | squash!\ * | amend!\ *) ;;
+  *)
+    if [ -n "$issue" ]; then
+      printf '%s\n' "$subject" | grep -Eq ": .*[^ ] \\(#$issue\\)\$" ||
+        reject "this branch is for issue #$issue: end the subject with (#$issue), got: $subject"
+    fi
+    ;;
+esac
+
+# shellcheck disable=SC2119 # With no file, it reads stdin.
+printf '%s\n' "$message" | dw_has_attribution
+case $? in
+  0) reject "AI attribution isn't allowed: remove the line that credits the tool, or reword it" ;;
+  1) ;;
+  *) reject "could not check the message for AI attribution" ;;
+esac

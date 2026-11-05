@@ -98,7 +98,8 @@ for bad in \
   ' feat: x' \
   'fixup! not conventional' \
   'fixup!feat: x' \
-  'fixup! '; do
+  'fixup! ' \
+  ''; do
   rejects experiment "$bad" 'expected'
 done
 
