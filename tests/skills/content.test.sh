@@ -226,4 +226,21 @@ conventions-ui|loading skeleton
 conventions-ui|connection error
 conventions-ui|project's own theme
 conventions-ui|/dev-workflow:screen-check
+choose-stack|where it runs
+choose-stack|who operates it
+choose-stack|data limits
+choose-stack|licences
+choose-stack|PoC
+choose-stack|production
+choose-stack|No default vendor
+choose-stack|One question at a time
+choose-stack|recommendation first
+choose-stack|current stable versions
+choose-stack|Context7
+choose-stack|docs/superpowers/specs/
+choose-stack|docs/decisions.md
+choose-stack|${CLAUDE_PLUGIN_ROOT}/stacks/
+setup|/dev-workflow:choose-stack
+setup|${CLAUDE_PLUGIN_ROOT}/stacks/<name>.md
+setup|only the chosen stacks' files
 TABLE

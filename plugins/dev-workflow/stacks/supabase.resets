@@ -1,0 +1,11 @@
+# Commands that wipe a Supabase database, for databaseResetCommands: one a line, as
+# setup reads them. From the Supabase CLI's docs for 3.0.0, checked on 2026-11-06.
+# A command matches when it starts with all of a line's words.
+supabase db reset
+npx supabase db reset
+supabase migration down
+npx supabase migration down
+supabase stop --no-backup
+npx supabase stop --no-backup
+supabase stack destroy
+npx supabase stack destroy

@@ -79,8 +79,8 @@ This detects the project type (node, python, rust, …), creates `release-please
         │   └── enable-releases.md       # /dev-workflow:enable-releases
         ├── hooks/                       # Claude Code hooks
         ├── scripts/                     # The hooks' scripts and setup's mechanical work
-        └── skills/
-            └── setup/                   # /dev-workflow:setup
+        ├── skills/                      # /dev-workflow:setup, choose-stack and the rest
+        └── stacks/                      # What the methodology means for each stack
 ```
 
 ## License
