@@ -34,6 +34,7 @@ done
 assert_contains "$text" "/config"
 assert_contains "$text" "How to change a default"
 assert_contains "$text" "## Quick start"
+assert_contains "$text" "## Setting up a project"
 assert_contains "$text" "## A day with dev-workflow"
 assert_contains "$text" "## What you type"
 assert_contains "$text" "## What happens by itself"

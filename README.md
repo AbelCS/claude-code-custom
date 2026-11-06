@@ -21,6 +21,23 @@ A [Claude Code](https://docs.claude.com/en/docs/claude-code) plugin marketplace 
 
 Check [Requirements](#requirements) for what you need first.
 
+## Setting up a project
+
+`/dev-workflow:setup` does this, once per project:
+
+- It reads the repo and checks the tools. It works on a new project, an existing one, or one set up with an older version.
+- It asks only what it can't read, one question at a time, with its recommendation first: the stack, the commands for `check` and `verify`, whether there are screens or a database, and a few approvals.
+- It shows every file it would create or update, and every conflict it will leave alone. It writes nothing until you say yes.
+- After the yes, it writes `.claude/dev-workflow.json`, the rules in `AGENTS.md` and a `CLAUDE.md` that imports them, the git hooks in `.githooks/`, the attribution settings, and `docs/decisions.md` and `docs/maintenance.md` if they're missing. It also turns the git hooks on.
+- With your approval, it also sets the GitHub repo to squash-only merges with a blank message, and to delete merged branches.
+- Git hooks aren't cloned. In a fresh clone, turn them on yourself:
+
+  ```sh
+  git config core.hooksPath .githooks
+  ```
+
+- If setup added a `prepare` script to `package.json`, `npm install` does it for you. If you forget, the session start warns you.
+
 ## A day with dev-workflow
 
 Say you want to add search. You type almost nothing special: you describe the work.
@@ -44,64 +61,55 @@ At the end, Claude says what landed and what was verified.
 
 You can call any skill by name, such as `/dev-workflow:land`, at any time. You don't have to. Say what you want in plain words, such as "check the screens I changed" or "get an outside review of this pull request", and the right skill comes in. Claude says "Using screen-check to ..." when one does.
 
-Setup reads the repo and checks the tools. It asks only what it can't read, one question at a time, with its recommendation first: the stack, the commands for `check` and `verify`, whether there are screens or a database, and a few approvals. It works on a new project, an existing one, or one set up with an older version. Then it shows every file it would create or update, and every conflict it will leave alone. It writes nothing until you say yes.
-
-After the yes, it writes `.claude/dev-workflow.json`, the rules in `AGENTS.md` and a `CLAUDE.md` that imports them, the git hooks in `.githooks/`, the attribution settings, and `docs/decisions.md` and `docs/maintenance.md` if they're missing. It also turns the git hooks on. With your approval, it also sets the GitHub repo to squash-only merges with a blank message, and to delete merged branches.
-
-Git hooks aren't cloned. In a fresh clone, turn them on yourself:
-
-```sh
-git config core.hooksPath .githooks
-```
-
-If setup added a `prepare` script to `package.json`, `npm install` does it for you. If you forget, the session start warns you.
-
 ## What happens by itself
 
-Nine skills. Seven come in on their own when their trigger comes up, and you can call them yourself too. Two start only when you type them.
+Nine skills. Seven come in on their own when their trigger comes up. Two start only when you type them.
 
-| Skill | What it does | When it comes in | Starts |
-|---|---|---|---|
-| `/dev-workflow:setup` | Sets up or upgrades a repo with the methodology | You ask to set up or upgrade a repo, or start a new web project | On its own, or by command |
-| `/dev-workflow:choose-stack` | Decides the stack, one question at a time, and records it | A new project, or part of one, has no stack decided | On its own, or by command |
-| `/dev-workflow:conventions-code` | Applies the module shape, boundaries and data rules | You decide where code, a query or a permission check goes, add a table, or change how data is read or saved | On its own, or by command |
-| `/dev-workflow:conventions-ui` | Applies the design system, copy, theme, accessibility and touch rules | You build, change or word a screen, form, label or message | On its own, or by command |
-| `/dev-workflow:screen-check` | Checks every touched screen in a browser and fixes what it finds | Anything people see has changed | On its own, or by command |
-| `/dev-workflow:independent-review` | Gets a review by another model, with a narrow brief, and checks each finding against the code | A pull request is larger than `review_threshold_lines`, or you ask for an outside review | On its own, or by command |
-| `/dev-workflow:land` | Confirms the issue is met, runs `verify` and the reviews needed, opens the pull request, squash-merges it when green and updates the default branch | Work on a branch is finished and ready to merge | On its own, or by command |
-| `/dev-workflow:maintain` | Sweeps branches, dead code, dependencies, code smells, docs and the setup, and records the run in `docs/maintenance.md` | Maintenance is due | Command only |
-| `/dev-workflow:enable-releases` | Sets up release-please in a GitHub repo | You want releases set up | Command only |
+**Comes in on its own** (you can also call it by name):
+
+| Skill | What it does | When it comes in |
+|---|---|---|
+| `/dev-workflow:setup` | Sets up or upgrades a repo with the methodology | You ask to set up or upgrade a repo, or start a new web project |
+| `/dev-workflow:choose-stack` | Decides the stack, one question at a time, and records it | A new project, or part of one, has no stack decided |
+| `/dev-workflow:conventions-code` | Applies the module shape, boundaries and data rules | You decide where code, a query or a permission check goes, add a table, or change how data is read or saved |
+| `/dev-workflow:conventions-ui` | Applies the design system, copy, theme, accessibility and touch rules | You build, change or word a screen, form, label or message |
+| `/dev-workflow:screen-check` | Checks every touched screen in a browser and fixes what it finds | Anything people see has changed |
+| `/dev-workflow:independent-review` | Gets a review by another model, with a narrow brief, and checks each finding against the code | A pull request is larger than `review_threshold_lines`, or you ask for an outside review |
+| `/dev-workflow:land` | Confirms the issue is met, runs `verify` and the reviews needed, opens the pull request, squash-merges it when green and updates the default branch | Work on a branch is finished and ready to merge |
+
+**Only when you type it:**
+
+| Skill | What it does | When to type it |
+|---|---|---|
+| `/dev-workflow:maintain` | Sweeps branches, dead code, dependencies, code smells, docs and the setup, and records the run in `docs/maintenance.md` | Maintenance is due |
+| `/dev-workflow:enable-releases` | Sets up release-please in a GitHub repo | You want releases set up |
 
 Superpowers skills come in alongside these: `brainstorming` shapes a new idea, `test-driven-development` writes the test first, and `systematic-debugging` handles a failure.
 
-The session-start check runs every session in a set-up project. It prints one line for each problem: git hooks off, a tool or plugin missing, rules out of date, maintenance overdue. It is silent when all is well.
+The session-start check also runs by itself. See [Guardrails](#guardrails).
 
 ## Guardrails
 
-There are two layers.
+Two layers check the rules. Both do nothing in a repo that hasn't run `/dev-workflow:setup`: the Claude Code hooks look for `.claude/dev-workflow.json` first, and the git hooks exist only where setup wrote them.
 
-- **Git hooks** are copied into the project by setup. They work for anyone who commits there, with or without Claude Code or this plugin: `pre-commit` and `commit-msg` on every commit, `pre-push` on every push. A fresh clone has to turn them on: setup says how, usually `git config core.hooksPath .githooks`.
-- **Claude Code hooks** come with the plugin. They apply only to Claude's own commands and edits: before each Bash command, file write and edit, and GitHub MCP call.
+**Git hooks** are copied into the project by setup. They work for anyone who commits there, with or without Claude Code or this plugin. A fresh clone has to turn them on (see [Setting up a project](#setting-up-a-project)).
 
-| Rule | What checks it | What you see |
+| Hook | When it runs | What it checks |
 |---|---|---|
-| Conventional Commit format | Git hook (`commit-msg`) | The commit is refused, with a message |
-| Issue number in the subject, on a `<type>/<issue>-<slug>` branch | Git hook (`commit-msg`) | The commit is refused, with a message |
-| No AI attribution in commits | Git hook (`commit-msg`) and the project's attribution settings | The commit is refused, with a message |
-| Checks pass before a push | Git hook (`pre-push`), which runs the project's `check` command | The push doesn't happen |
-| No direct push to the default branch | Git hook (`pre-push`) | The push doesn't happen |
-| Staged files are formatted | Git hook (`pre-commit`) | The commit is refused, with a message |
-| No per-pull-request workflow trigger | Git hook (`pre-commit`) and a Claude Code hook on writes | The commit is refused, or Claude's write asks for your yes |
-| No AI attribution in pull requests, issues, comments and releases | Claude Code hook | A block message |
-| Squash merges with a blank message | Claude Code hook | A block message |
-| Pull request title format and a closing keyword | Claude Code hook | A block message |
-| No local merge into the default branch | Claude Code hook | A block message |
-| No `--no-verify` on commits | Claude Code hook | A block message |
-| No merge chained after tests | Claude Code hook | A block message |
-| A database reset needs a person's yes | Claude Code hook | A request for your yes |
-| One-line warnings at session start: git hooks off, a plugin missing, rules out of date, maintenance overdue | Claude Code hook | One line per problem |
+| `commit-msg` | Every commit | Conventional Commit format. The issue number in the subject, on a `<type>/<issue>-<slug>` branch. No AI attribution, along with the project's attribution settings |
+| `pre-commit` | Every commit | Staged files are formatted. No workflow gains a per-pull-request trigger |
+| `pre-push` | Every push | Checks pass: it runs the project's `check` command. No direct push to the default branch |
 
-A block is a message that says why and what to do instead. You see it as the command's result, and Claude acts on it. Two examples:
+**Claude Code hooks** come with the plugin. They apply only to Claude's own commands and edits.
+
+| Hook | When it runs | What it does |
+|---|---|---|
+| Commands | Before each Bash command | Blocks a merge chained after tests, a local merge into the default branch, `--no-verify` on commits, AI attribution in `gh` text, a pull request title without the right format or a closing keyword, and a squash merge without a blank message. Asks for a person's yes before a database reset |
+| GitHub tools | Before each GitHub MCP call | Blocks AI attribution, and merging that way |
+| Workflow edits | Before each file write and edit | Asks for a person's yes before a workflow gains a per-pull-request trigger |
+| Session start | Every session in a set-up project | Prints one line for each problem: git hooks off, a tool or plugin missing, rules out of date, maintenance overdue. It is silent when all is well |
+
+**What you see.** A block is a message that says why and what to do instead. You see it as the command's result, and Claude acts on it. Two examples:
 
 ```text
 dev-workflow: --no-verify skips the git hooks, and -n means the same on git commit.
@@ -114,9 +122,7 @@ commit-msg: this branch is for issue #12: end the subject with (#12), got: feat:
 
 Some actions ask for your approval instead of being blocked. A database reset command gets "this looks like a database reset, which destroys data, so it needs a person's yes." A write that gives a workflow a per-PR trigger gets "this gives `<file>` a trigger on `<event>`, and CI runs only for releases, so it needs a person's yes." Without a person to answer, an approval request acts as a denial.
 
-Both layers do nothing in a repo that hasn't run `/dev-workflow:setup`. The Claude Code hooks look for `.claude/dev-workflow.json` first, and the git hooks exist only where setup wrote them. A hook that breaks blocks the action, so a broken check never lets a command through.
-
-These checks catch mistakes. They read a command's text, so they aren't a security boundary. Judgment rules, such as test-first and honest reporting, stay as guidance in `AGENTS.md` and the skills.
+A hook that breaks blocks the action, so a broken check never lets a command through. These checks catch mistakes. They read a command's text, so they aren't a security boundary. Judgment rules, such as test-first and honest reporting, stay as guidance in `AGENTS.md` and the skills.
 
 `docs/hook-behaviour.md` records what the hooks were seen to do in real sessions, including what wasn't tested.
 
