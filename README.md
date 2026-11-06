@@ -21,7 +21,7 @@ Then run this in each project you want to set up:
 /dev-workflow:setup
 ```
 
-Setup looks at the repo, checks the tools, asks what it can't detect one question at a time, and shows every file it would write. It writes nothing until you say yes. It works on a new project, an existing one, or one set up with an older version.
+Setup looks at the repo, checks the tools, asks what it can't detect one question at a time, and shows every file it would write. It writes nothing until you say yes. It works on a new project, an existing one, or one set up with an older version. With your approval, setup also sets the GitHub repo to squash-only merges with a blank message, and to delete merged branches.
 
 **Requirements.** Setup stops if one is missing.
 
@@ -105,7 +105,7 @@ The plugin has ten settings. Skills and hooks read them, so no model name is wri
 
 | Key | Default | What it's for |
 |---|---|---|
-| `model_noncoding` | `claude-fable-5-1` | Research, product thinking and design critique |
+| `model_noncoding` | `claude-fable-5-1` | Research, product thinking, design critique, specs and plans |
 | `model_noncoding_alt` | `gpt-6-astra` | A second opinion on the same work, from OpenAI through the Codex CLI |
 | `model_docs` | `claude-sonnet-5-5` | Docs, READMEs and similar writing |
 | `effort_docs` | `high` | Reasoning effort for docs |
@@ -144,8 +144,9 @@ git config core.hooksPath .githooks
 | Command | What it does |
 |---|---|
 | `scripts/check` | Script tests, plugin validation and shell lint. `pre-push` runs it |
-| `scripts/verify` | `check`, then the slower tests in `tests/verify_only/`: the leak search, the install and update tests, and live hook tests that spend a few cents on real sessions |
+| `scripts/verify` | `check`, then the slower tests in `tests/verify_only/`: the leak search, the install and update tests, live hook tests that spend a few cents on real sessions, and end-to-end setup tests on the sample apps, with their database tests in Docker |
 | `sh tests/<name>.test.sh` | One test |
+| `claude plugin eval plugins/dev-workflow --ablation none --max-cost-usd 4` | The skill evals: does each skill come in on natural phrasing and stay out otherwise. Real sessions, about $3 |
 
 Two variables skip the slowest parts of `scripts/verify`, and it says so when they do. `DW_SKIP_LIVE=1` skips the live hook tests. `DW_SKIP_FIXTURES=1` skips the end-to-end setup tests on sample apps, which install packages and start Docker containers.
 

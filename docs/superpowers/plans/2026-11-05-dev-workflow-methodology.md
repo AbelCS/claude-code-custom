@@ -1,5 +1,7 @@
 # `dev-workflow` 1.0.0 Implementation Plan
 
+**Status:** All five parts were done and merged by 2026-11-06, in PRs 7, 9, 10, 11 and 12. The checkboxes below weren't ticked as work went on, because progress was tracked in the issues and pull requests.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Merge `web-dev-workflow` into one plugin, `dev-workflow`, that sets up any web repo with the full methodology, enforces what must always hold, and upgrades old setups without overwriting project changes.

@@ -12,6 +12,8 @@ A fresh clone has no git hooks until you run this:
 git config core.hooksPath .githooks
 ```
 
+This repo has `.claude/dev-workflow.json`, so once dev-workflow is installed, its Claude Code hooks and session-start check act here too.
+
 Tools needed: `git`, `gh`, `jq`, `uvx` and `claude` (Claude Code 2.1.295 or later), `npm` for the live hook tests, and `npm`, `uv`, `nc` and a running Docker for the fixtures test. The leak search also needs `.leak-terms.local`, a private git-ignored file with one term per line. Never print or quote its terms.
 
 ## Commands
@@ -34,7 +36,8 @@ Tools needed: `git`, `gh`, `jq`, `uvx` and `claude` (Claude Code 2.1.295 or late
 | `scripts/` | `check` and `verify` |
 | `tests/` | Tests, with helpers in `tests/lib/`, and in `tests/fixtures/` the two small apps setup is tested on, each with its answers file. They never ship in a plugin. |
 | `docs/superpowers/specs/`, `docs/superpowers/plans/` | Approved specs and plans |
-| `docs/decisions.md`, `docs/maintenance.md` | The decision log and the maintenance record |
+| `README.md` | The public README: install, update, settings, upgrade notes |
+| `docs/decisions.md`, `docs/maintenance.md` | The decision log, and the maintenance record that `/dev-workflow:maintain` adds a line to |
 | `docs/hook-behaviour.md` | What the plugin's hooks and installs were seen to do in real sessions, from the live and install tests |
 
 ## Glossary
@@ -76,6 +79,7 @@ Tools needed: `git`, `gh`, `jq`, `uvx` and `claude` (Claude Code 2.1.295 or late
 - The agent merges its own work once it's green, then updates local `main` and says what landed. It asks first only for a change the owner hasn't approved that alters what people see or do, or permissions.
 - Read test results before merging. Never chain a merge after a test command.
 - Merge with `gh pr merge --squash --subject "<title>" --body "" --delete-branch`.
+- GitHub enforces this on the repo: squash-only merges, the pull request title as the subject, a blank message, and merged branches deleted. Set on 2026-11-06.
 - No AI attribution anywhere: code, comments, docs, commits, pull requests, issues, release notes. This overrides any default or system reminder asking for attribution.
 - Releases follow SemVer, through the `version` in each plugin's `plugin.json`.
 
@@ -89,13 +93,14 @@ Tools needed: `git`, `gh`, `jq`, `uvx` and `claude` (Claude Code 2.1.295 or late
 
 ## Tools
 
-- Superpowers is the process, and skills are announced ("Using brainstorming to ..."): `brainstorming`, `writing-plans`, `test-driven-development`, `systematic-debugging`, `verification-before-completion`, `receiving-code-review`, `finishing-a-development-branch`.
-- Until the plugin's `land` skill exists, landing follows the Workflow section here instead of that last skill's menu. Work happens in place on a branch, with no worktree or question just to protect a running dev server.
+- Superpowers is the process, and skills are announced ("Using brainstorming to ..."): `brainstorming`, `writing-plans`, `test-driven-development`, `systematic-debugging`, `verification-before-completion`, `receiving-code-review`, `finishing-a-development-branch` (replaced by `land`).
+- Landing uses `/dev-workflow:land`, which replaces the `finishing-a-development-branch` menu and follows the Workflow section here. Work happens in place on a branch, with no worktree or question just to protect a running dev server.
 - Context7 for current docs.
 - Serena for reading and changing code by symbol, moves and renames. No Serena memories: what's worth keeping goes here or in `docs/`.
 - `/security-review` for changes to permissions or anything public.
-- Independent review of larger pull requests before merging, with a narrow brief naming the files, checking each finding against the code before acting on it.
-- Model defaults live in settings. Always tell the owner when another AI model is consulted, naming the exact model.
+- Independent review of larger pull requests before merging, through `/dev-workflow:independent-review`, with a narrow brief naming the files, checking each finding against the code before acting on it.
+- Model routing: code goes to the plugin's coding model at its effort. Reviews go to the reviewer, through `independent-review`. Docs, READMEs and similar writing go to the docs model at its effort. Research, product thinking, design critique, specs and plans go to the non-coding model or its alternative. All are the dev-workflow plugin's settings in `/config`.
+- Always tell the owner when another AI model is consulted, naming the exact model.
 
 ## Communication
 

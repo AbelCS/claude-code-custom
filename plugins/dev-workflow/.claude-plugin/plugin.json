@@ -10,13 +10,13 @@
     "model_noncoding": {
       "type": "string",
       "title": "Model for non-coding work",
-      "description": "The model for research, product thinking and design critique",
+      "description": "The model for research, product thinking, design critique, specs and plans",
       "default": "claude-fable-5-1"
     },
     "model_noncoding_alt": {
       "type": "string",
       "title": "Alternative model for non-coding work",
-      "description": "A second opinion on research, product thinking and design critique, from OpenAI through the Codex CLI",
+      "description": "A second opinion on research, product thinking, design critique, specs and plans, from OpenAI through the Codex CLI",
       "default": "gpt-6-astra"
     },
     "model_docs": {

@@ -19,7 +19,7 @@ assert_contains "$agents" "Closes #"
 # A fresh clone has no hooks until someone runs this.
 assert_contains "$agents" "git config core.hooksPath .githooks"
 # Without this, the superpowers skill's menu conflicts with the Workflow section.
-assert_contains "$agents" "landing follows the Workflow section here"
+assert_contains "$agents" "Landing uses \`/dev-workflow:land\`, which replaces the \`finishing-a-development-branch\` menu and follows the Workflow section here"
 assert_contains "$agents" "no worktree or question just to protect a running dev server"
 
 # --- docs

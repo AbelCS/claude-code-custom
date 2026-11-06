@@ -1,6 +1,6 @@
 # `dev-workflow` 1.0.0: one methodology for any web project
 
-Issue: [#1](https://github.com/AbelCS/claude-code-custom/issues/1). Status: approved by the owner on 2026-11-05.
+Issue: [#1](https://github.com/AbelCS/claude-code-custom/issues/1). Status: approved by the owner on 2026-11-05, and released as 1.0.0 on 2026-11-06 in PRs 7, 9, 10, 11 and 12.
 
 ## 1. Intent
 
