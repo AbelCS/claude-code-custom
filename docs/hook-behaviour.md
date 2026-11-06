@@ -65,6 +65,25 @@ In a one-off hand run through `--plugin-dir` with no saved settings, a hook saw 
 
 A `-p` session shows no workspace trust dialog, as the docs say. The plugin's hooks ran in temp folders nobody had ever trusted. In a one-off hand run, an allow rule in the project's own `.claude/settings.json` was ignored, with this on stderr: `Ignoring 1 permissions.allow entry from .claude/settings.json: this workspace has not been trusted`. So project allow rules don't decide anything in these results, and rules given by `--allowedTools` do.
 
+## Installing and updating
+
+Results from Claude Code 2.1.317 on macOS, on 2026-11-06, from `tests/verify_only/install.test.sh`, which checks each of these. Each case has its own `CLAUDE_CONFIG_DIR` in a temp folder, and the marketplace is served as a git repository, so plugins are cloned and cached as they are from GitHub. "Old" is the marketplace with `web-dev-workflow` 1.2.0 and `dev-workflow` 0.2.0; "new" has only `dev-workflow` 1.0.0 and `"renames": { "web-dev-workflow": "dev-workflow" }`. Sessions there have no login, so they stop before any model call and cost nothing, but they still load plugins, run the session-start hook and write a transcript.
+
+| Case | What happened |
+|---|---|
+| Fresh install, from the git marketplace or a local folder | `dev-workflow` 1.0.0 loads with nine skills. `claude plugin details` lists them once each, and no commands |
+| `dev-workflow` 0.2.0, then `claude plugin marketplace update` and `claude plugin update` | `updated from 0.2.0 to 1.0.0`, then nine skills |
+| `web-dev-workflow` for the user and a project, then `claude plugin marketplace update` and a session | Both settings files now enable `dev-workflow@claude-code-custom`, and the old key is gone. The old install records are gone too. One `dev-workflow` record is left, pointing at a version folder that doesn't exist, so the plugin is on but doesn't load: the docs' "not cached" case |
+| The same, then `claude plugin install dev-workflow@claude-code-custom` | Loads 1.0.0 with nine skills, in the project and elsewhere. It isn't refused as a downgrade from 1.2.0, since the new name has its own cache folder |
+| `web-dev-workflow` for the user only, and a project whose committed settings name it | Not loaded after the marketplace update. The project's key is rewritten the first time a session runs there |
+| The same, then `claude plugin update dev-workflow@claude-code-custom` | It prints `already at the latest version (1.0.0)`, yet fetches the files, and the plugin loads |
+
+In a hand run on the same version, `claude plugin update` run inside a project fixed only that project's record, and the plugin still didn't load elsewhere. `claude plugin install` fixed every case tried, so that's the step to give people who had `web-dev-workflow`.
+
+### `${user_config.*}` in a skill
+
+In a marketplace install, an option that was never saved stays a literal `${user_config.KEY}` in the skill's text. The `default` in `plugin.json` isn't used. Once saved with `claude plugin configure`, the value is filled in. `${CLAUDE_PLUGIN_ROOT}` in the same text is always filled in. The test reads this from the session transcript after `/dev-workflow:maintain`. So the skills' own fallback, reading the default from `plugin.json` when a placeholder shows, is what applies until someone saves the setting, as it was with `--plugin-dir`.
+
 ## Limits
 
 - Only a Bash matcher and a `Write|Edit` matcher were exercised in real sessions. The GitHub matcher is tested against tool names read from `hooks.json`, not against a live server.

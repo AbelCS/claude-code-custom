@@ -7,16 +7,16 @@
   },
   "plugins": [
     {
-      "name": "web-dev-workflow",
-      "description": "Establishes web development workflow rules for Claude Code projects",
-      "source": "./plugins/web-dev-workflow",
-      "category": "development"
-    },
-    {
       "name": "dev-workflow",
-      "description": "General development workflow rules (issue-driven development, etc.)",
+      "description": "Sets up a repo with a full development methodology and enforces what must always hold: decisions, workflow, testing, code and tools",
       "source": "./plugins/dev-workflow",
-      "category": "development"
+      "category": "development",
+      "author": {
+        "name": "AbelCS"
+      }
     }
-  ]
+  ],
+  "renames": {
+    "web-dev-workflow": "dev-workflow"
+  }
 }

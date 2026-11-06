@@ -6,7 +6,6 @@ A personal [Claude Code](https://docs.claude.com/en/docs/claude-code) plugin mar
 
 | Plugin | Description |
 |---|---|
-| [web-dev-workflow](plugins/web-dev-workflow) | Establishes web development workflow rules (conventional commits, TDD, Serena, Context7, latest stable versions, commit discipline) in any project. |
 | [dev-workflow](plugins/dev-workflow) | General development workflow tooling for GitHub-hosted projects: issue-driven development and release-please setup. |
 
 ## Installation
@@ -15,7 +14,6 @@ Add this marketplace from GitHub, then install the plugins you want.
 
 ```text
 /plugin marketplace add AbelCS/claude-code-custom
-/plugin install web-dev-workflow@claude-code-custom
 /plugin install dev-workflow@claude-code-custom
 ```
 
@@ -26,18 +24,6 @@ To update later:
 ```
 
 ## Usage
-
-### web-dev-workflow
-
-Once installed, run inside any project where you want the workflow rules applied:
-
-```text
-/web-dev-workflow:setup
-```
-
-This writes the workflow rules into the project's `AGENTS.md` (creating it if needed) and ensures `CLAUDE.md` exists as a pointer to `AGENTS.md` for Claude Code compatibility. If a populated `CLAUDE.md` already exists, its content is migrated into `AGENTS.md` first. The rules then apply to every Claude Code (or other agent) session in that project.
-
-The same setup is also available as an auto-activating skill — Claude will offer to run it when it detects you are starting a new web project.
 
 ### dev-workflow
 
@@ -72,14 +58,6 @@ Each area's fixes land through their own issue and pull request, and the run is 
 ├── .claude-plugin/
 │   └── marketplace.json     # Marketplace manifest
 └── plugins/
-    ├── web-dev-workflow/
-    │   ├── .claude-plugin/
-    │   │   └── plugin.json
-    │   ├── commands/
-    │   │   └── setup.md          # /web-dev-workflow:setup
-    │   └── skills/
-    │       └── setup/
-    │           └── SKILL.md      # Auto-activating setup skill
     └── dev-workflow/
         ├── .claude-plugin/
         │   └── plugin.json
