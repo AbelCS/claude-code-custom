@@ -1,22 +1,35 @@
 {
   "name": "dev-workflow",
   "description": "Sets up a repo with a full development methodology and enforces what must always hold: decisions, workflow, testing, code and tools",
-  "version": "0.2.0",
+  "version": "1.0.0",
   "author": {
     "name": "AbelCS"
   },
+  "license": "MIT",
   "userConfig": {
     "model_noncoding": {
       "type": "string",
       "title": "Model for non-coding work",
-      "description": "The model for specs, plans and other work that isn't code",
+      "description": "The model for research, product thinking and design critique",
       "default": "claude-fable-5-1"
     },
     "model_noncoding_alt": {
       "type": "string",
       "title": "Alternative model for non-coding work",
-      "description": "A second opinion on non-coding work, from OpenAI through the Codex CLI",
+      "description": "A second opinion on research, product thinking and design critique, from OpenAI through the Codex CLI",
       "default": "gpt-6-astra"
+    },
+    "model_docs": {
+      "type": "string",
+      "title": "Model for docs",
+      "description": "The model for docs, READMEs and similar writing",
+      "default": "claude-sonnet-5-5"
+    },
+    "effort_docs": {
+      "type": "string",
+      "title": "Effort for docs",
+      "description": "The reasoning effort for docs, READMEs and similar writing",
+      "default": "high"
     },
     "model_coding": {
       "type": "string",

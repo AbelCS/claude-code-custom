@@ -97,6 +97,15 @@ assert_contains "$decisions" "or earlier if the owner asks"
 # Models: the routing rule, read from the plugin's settings, never a name.
 assert_contains "$models" "/config"
 assert_contains "$models" "coding"
+# Three routes: docs, non-coding thinking, coding; reviews through independent-review.
+assert_contains "$models" "READMEs"
+assert_contains "$models" "model for docs"
+assert_contains "$models" "effort for docs"
+assert_contains "$models" "design critique"
+assert_contains "$models" "model for non-coding work or its alternative"
+assert_contains "$models" "Specs and plans"
+assert_contains "$models" "effort for coding"
+assert_contains "$models" "/dev-workflow:independent-review"
 assert_contains "$models" "naming the exact model"
 
 # Skills are named in their plugin's command form.

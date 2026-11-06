@@ -61,10 +61,15 @@ assert_exit 0 jq -e '
   (.author.name | type == "string")
   and (.description | test("methodology"))
   and (.userConfig | keys | sort) == ([
-    "model_noncoding", "model_noncoding_alt", "model_coding", "effort_coding",
+    "model_docs", "effort_docs", "model_noncoding", "model_noncoding_alt", "model_coding", "effort_coding",
     "reviewer_name", "reviewer_command", "review_threshold_lines", "maintenance_interval_days"
   ] | sort)
+  and .userConfig.model_docs.default == "claude-sonnet-5-5"
+  and .userConfig.effort_docs.default == "high"
+  and (.userConfig.model_docs.description | test("README"))
   and .userConfig.model_noncoding.default == "claude-fable-5-1"
+  and (.userConfig.model_noncoding.description | test("research") and test("product") and test("design critique"))
+  and (.userConfig.model_noncoding_alt.description | test("research") and test("product") and test("design critique"))
   and .userConfig.model_noncoding_alt.default == "gpt-6-astra"
   and .userConfig.model_coding.default == "claude-opus-5-5"
   and .userConfig.effort_coding.default == "high"

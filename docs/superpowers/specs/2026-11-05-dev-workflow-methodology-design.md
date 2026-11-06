@@ -114,8 +114,10 @@ Read through `${user_config.KEY}` in skills and `CLAUDE_PLUGIN_OPTION_<KEY>` in 
 
 | Key | Default |
 |---|---|
-| `model_noncoding` | `claude-fable-5-1` |
-| `model_noncoding_alt` | `gpt-6-astra` (OpenAI, through the Codex CLI) |
+| `model_noncoding` | `claude-fable-5-1`, for research, product thinking and design critique |
+| `model_noncoding_alt` | `gpt-6-astra` (OpenAI, through the Codex CLI), the same work's alternative |
+| `model_docs` | `claude-sonnet-5-5`, for docs, READMEs and similar writing (owner, 2026-11-06) |
+| `effort_docs` | `high` (owner, 2026-11-06) |
 | `model_coding` | `claude-opus-5-5` |
 | `effort_coding` | `high` |
 | `reviewer_name` | `GPT-6.1 Sol (OpenAI, high effort, read-only)`, shown when announcing a review |
@@ -439,7 +441,8 @@ The content to capture. Where a rule applies only with a database, screens or a 
 
 Defaults, kept in settings:
 
-- Fable 5.1 or GPT-6 Astra for non-coding work.
+- Sonnet 5.5 at High effort for docs, READMEs and similar writing (owner, 2026-11-06).
+- Fable 5.1 or GPT-6 Astra for research, product thinking and design critique (owner, 2026-11-06).
 - Opus 5.5 at High effort for coding.
 - GPT-6.1 Sol, always at High effort with the explicit flag, for code reviews.
 - Always tell the owner when another AI model is consulted, naming the exact model.

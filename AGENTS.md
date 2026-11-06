@@ -1,6 +1,6 @@
 # claude-code-custom
 
-A public marketplace of Claude Code plugins. Its main plugin, `dev-workflow`, sets up a repo with a full development methodology and enforces what must always hold. It's being built up to 1.0.0, which absorbs `web-dev-workflow`. The design is in `docs/superpowers/specs/2026-11-05-dev-workflow-methodology-design.md`.
+A public marketplace of Claude Code plugins. Its main plugin, `dev-workflow`, sets up a repo with a full development methodology and enforces what must always hold. Since 1.0.0 it holds what the older `web-dev-workflow` did; that plugin is gone, and the marketplace renames it to `dev-workflow`. The design is in `docs/superpowers/specs/2026-11-05-dev-workflow-methodology-design.md`.
 
 This repo uses the methodology it ships. It has no screens and no database, so the rules for those don't apply here.
 
@@ -19,7 +19,7 @@ Tools needed: `git`, `gh`, `jq`, `uvx` and `claude` (Claude Code 2.1.295 or late
 | Command | What it does |
 |---|---|
 | `scripts/check` | Script tests, plugin validation and shell lint. `pre-push` runs it. |
-| `scripts/verify` | `check`, then the slower tests in `tests/verify_only/`: the leak search, live hook tests that spend a few cents on real sessions, and setup run end to end on the apps in `tests/fixtures/`, with their database tests in Docker. `DW_SKIP_LIVE=1` and `DW_SKIP_FIXTURES=1` skip those two, visibly. |
+| `scripts/verify` | `check`, then the slower tests in `tests/verify_only/`: the leak search, live hook tests that spend a few cents on real sessions, install tests in a throwaway Claude Code config that spend nothing, and setup run end to end on the apps in `tests/fixtures/`, with their database tests in Docker. `DW_SKIP_LIVE=1` and `DW_SKIP_FIXTURES=1` skip those two, visibly. |
 | `sh tests/<name>.test.sh` | One test. |
 | `claude plugin eval plugins/dev-workflow --ablation none --max-cost-usd 4` | The skill evals in `plugins/dev-workflow/evals/`: does each skill come in on natural phrasing and stay out otherwise. Real sessions, about $3. Results go to its git-ignored `results/`. |
 
@@ -28,15 +28,14 @@ Tools needed: `git`, `gh`, `jq`, `uvx` and `claude` (Claude Code 2.1.295 or late
 | Path | Holds |
 |---|---|
 | `.claude-plugin/marketplace.json` | The marketplace manifest |
-| `plugins/dev-workflow/` | The plugin being built, shipped to users |
-| `plugins/web-dev-workflow/` | The older plugin it replaces |
+| `plugins/dev-workflow/` | The plugin, shipped to users |
 | `.claude/dev-workflow.json` | Facts about this repo for the plugin's hooks |
 | `.githooks/` | This repo's git hooks: copies of the plugin's templates, plus their settings in `dev-workflow.env` |
 | `scripts/` | `check` and `verify` |
 | `tests/` | Tests, with helpers in `tests/lib/`, and in `tests/fixtures/` the two small apps setup is tested on, each with its answers file. They never ship in a plugin. |
 | `docs/superpowers/specs/`, `docs/superpowers/plans/` | Approved specs and plans |
 | `docs/decisions.md`, `docs/maintenance.md` | The decision log and the maintenance record |
-| `docs/hook-behaviour.md` | What the plugin's hooks were seen to do in real sessions, from the live tests |
+| `docs/hook-behaviour.md` | What the plugin's hooks and installs were seen to do in real sessions, from the live and install tests |
 
 ## Glossary
 
