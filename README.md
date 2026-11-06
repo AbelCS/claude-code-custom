@@ -40,6 +40,85 @@ Setup looks at the repo, checks the tools, asks what it can't detect one questio
 
 The Codex CLI is optional. `/dev-workflow:independent-review` needs it, and setup warns if it's missing.
 
+## How to use it
+
+This is what a day with dev-workflow looks like: what you type, and what happens on its own. The [Skills](#skills) and [What's enforced](#whats-enforced) tables below list every part.
+
+### Once per project
+
+Run this in the project:
+
+```text
+/dev-workflow:setup
+```
+
+Setup reads the repo and checks the tools. It asks only what it can't read, one question at a time, with its recommendation first: the stack, the commands for `check` and `verify`, whether there are screens or a database, and a few approvals. Then it shows every file it would create or update, and every conflict it will leave alone. It writes nothing until you say yes.
+
+After the yes, it writes `.claude/dev-workflow.json`, the rules in `AGENTS.md` and a `CLAUDE.md` that imports them, the git hooks in `.githooks/`, the attribution settings, and `docs/decisions.md` and `docs/maintenance.md` if they're missing. It also turns the git hooks on.
+
+Git hooks aren't cloned. In a fresh clone, turn them on yourself:
+
+```sh
+git config core.hooksPath .githooks
+```
+
+If setup added a `prepare` script to `package.json`, `npm install` does it for you. If you forget, the session start warns you.
+
+### A normal task, start to finish
+
+Say you want to add search. You type almost nothing special: you describe the work.
+
+1. **Issue.** The rules ask for an issue with an objective, scope and acceptance criteria before any meaningful work. Ask Claude to open it. The issue number comes back in the branch name and in every commit subject.
+2. **Branch.** Name it `<type>/<issue>-<slug>`, like `feat/12-search`. Claude creates it when you ask. `commit-msg` reads the issue number from the branch name.
+3. **Work.** Ask for the feature: "Add search to the products page." Skills come in on their own. Superpowers' `brainstorming` shapes a new idea, `test-driven-development` writes the test first, and `systematic-debugging` handles a failure. This plugin adds `conventions-code` when code, a query or a permission check is placed, `conventions-ui` when a screen or a label is built, and `choose-stack` if no stack is decided. You type nothing.
+4. **Commit.** Claude commits, or you do. Git runs `pre-commit`, which checks formatting of staged files and blocks a workflow gaining a per-PR trigger. Then `commit-msg` checks the subject, like `feat: add product search (#12)`, and rejects AI attribution.
+5. **Push.** `pre-push` runs the project's `check` command and refuses a direct push to the default branch. If `check` fails, the push doesn't happen.
+6. **Finish.** Say "land this", or just "this is done, merge it". `land` checks the acceptance criteria, runs `verify`, calls `independent-review` for a larger change and `screen-check` if screens changed, opens the pull request, squash-merges it once green, and updates your default branch. It asks first only for a change you haven't approved that alters what people see or do, money rules or permissions.
+
+At the end, Claude says what landed and what was verified.
+
+### What runs on its own, and when
+
+| What | When |
+|---|---|
+| `choose-stack` | A new project, or part of one, has no stack decided |
+| `conventions-code` | You decide where code, a query or a permission check goes, add a table, or change how data is read or saved |
+| `conventions-ui` | You build, change or word a screen, form, label or message |
+| `screen-check` | Anything people see has changed |
+| `independent-review` | A pull request is larger than `review_threshold_lines`, or you ask for an outside review |
+| `land` | Work on a branch is finished and ready to merge |
+| `setup` | You ask to set up or upgrade a repo, or start a new web project |
+| Session-start check | Every session in a set-up project. It prints one line for each problem: git hooks off, a tool or plugin missing, rules out of date, maintenance overdue. It is silent when all is well |
+| Git hooks | `pre-commit` and `commit-msg` on every commit, `pre-push` on every push, whoever makes it |
+| Claude Code hooks | Before each of Claude's Bash commands, file writes and edits, and GitHub MCP calls |
+
+### What you type yourself
+
+| Command | When |
+|---|---|
+| `/dev-workflow:setup` | Once per project, and again after updating the plugin |
+| `/dev-workflow:maintain` | The session-start line says maintenance is overdue. It never runs on a schedule |
+| `/dev-workflow:enable-releases` | You want release-please set up in a GitHub repo |
+
+You can call any other skill the same way, at any time: `/dev-workflow:choose-stack`, `/dev-workflow:land`, `/dev-workflow:independent-review`, `/dev-workflow:screen-check`, `/dev-workflow:conventions-code` and `/dev-workflow:conventions-ui`. You don't have to. Say what you want in plain words, such as "check the screens I changed" or "get an outside review of this pull request", and the right skill comes in. Claude says "Using screen-check to ..." when one does.
+
+### When a hook steps in
+
+A block is a message that says why and what to do instead. You see it as the command's result, and Claude acts on it. Two examples:
+
+```text
+dev-workflow: --no-verify skips the git hooks, and -n means the same on git commit.
+Run the command without it, and fix what the hooks report.
+```
+
+```text
+commit-msg: this branch is for issue #12: end the subject with (#12), got: feat: add search
+```
+
+Some actions ask for your approval instead of being blocked. A database reset command gets "this looks like a database reset, which destroys data, so it needs a person's yes." A write that gives a workflow a per-PR trigger gets "this gives `<file>` a trigger on `<event>`, and CI runs only for releases, so it needs a person's yes." Without a person to answer, an approval request acts as a denial.
+
+None of this applies to a project that hasn't run `/dev-workflow:setup`. The Claude Code hooks look for `.claude/dev-workflow.json` first and do nothing without it, and the git hooks exist only where setup wrote them.
+
 ## Updating
 
 Auto-update is off for this marketplace by default. To update:
