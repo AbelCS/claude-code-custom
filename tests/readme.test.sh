@@ -33,7 +33,12 @@ for key in $(jq -r '.userConfig | keys[]' "$manifest"); do
 done
 assert_contains "$text" "/config"
 assert_contains "$text" "How to change a default"
-assert_contains "$text" "## How to use it"
+assert_contains "$text" "## Quick start"
+assert_contains "$text" "## A day with dev-workflow"
+assert_contains "$text" "## What you type"
+assert_contains "$text" "## What happens by itself"
+assert_contains "$text" "## Guardrails"
+assert_contains "$text" "## Requirements"
 
 # --- every skill is in the table
 
@@ -41,7 +46,7 @@ for dir in "$ROOT"/plugins/dev-workflow/skills/*/; do
   assert_contains "$text" "\`/dev-workflow:$(basename "$dir")\`"
 done
 
-# --- what's enforced, and what was tested
+# --- guardrails, and what was tested
 
 assert_contains "$text" "docs/hook-behaviour.md"
 assert_contains "$text" "git hooks"
@@ -49,7 +54,7 @@ assert_contains "$text" "Claude Code hooks"
 
 # --- upgrade notes
 
-upgrade=$(printf '%s\n' "$text" | awk '/^## Upgrade notes/ { on = 1; next } /^## / { on = 0 } on')
+upgrade=$(printf '%s\n' "$text" | awk '/^### Upgrade notes/ { on = 1; next } /^##+ / { on = 0 } on')
 assert_contains "$upgrade" "/web-dev-workflow:setup"
 assert_contains "$upgrade" "/dev-workflow:enable-github-issues"
 assert_contains "$upgrade" "not cached"
@@ -60,7 +65,7 @@ assert_contains "$upgrade" "two runs"
 assert_contains "$upgrade" "Rerun \`/dev-workflow:setup\`"
 
 # The old commands appear nowhere else.
-outside=$(printf '%s\n' "$text" | awk '/^## Upgrade notes/ { on = 1; next } /^## / { on = 0 } !on')
+outside=$(printf '%s\n' "$text" | awk '/^### Upgrade notes/ { on = 1; next } /^##+ / { on = 0 } !on')
 assert_not_contains "$outside" "/web-dev-workflow:"
 assert_not_contains "$outside" "enable-github-issues"
 
