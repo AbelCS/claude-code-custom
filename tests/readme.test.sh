@@ -33,6 +33,7 @@ for key in $(jq -r '.userConfig | keys[]' "$manifest"); do
 done
 assert_contains "$text" "/config"
 assert_contains "$text" "How to change a default"
+assert_contains "$text" "## How to use it"
 
 # --- every skill is in the table
 
