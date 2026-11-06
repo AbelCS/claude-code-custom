@@ -149,7 +149,7 @@ git config core.hooksPath .githooks
 
 Two variables skip the slowest parts of `scripts/verify`, and it says so when they do. `DW_SKIP_LIVE=1` skips the live hook tests. `DW_SKIP_FIXTURES=1` skips the end-to-end setup tests on sample apps, which install packages and start Docker containers.
 
-Tools needed: `git`, `gh`, `jq`, `uvx`, `claude` (2.1.295 or later) and `npm`. The leak search also needs `.leak-terms.local`, a private git-ignored file.
+Tools needed: `git`, `gh`, `jq`, `uvx`, `claude` (2.1.295 or later) and `npm`, plus `uv`, `nc` and a running Docker for the fixtures test. The leak search also needs `.leak-terms.local`, a private git-ignored file.
 
 ## License
 
