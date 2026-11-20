@@ -325,7 +325,7 @@ check_gpt_models() {
     case $gm_current in gpt-*) ;; *) continue ;; esac
     [ -z "$gm_extra" ] || continue
     case $gm_role in
-      reviewer) say "$gm_slug is available; the reviewer uses $gm_current. Change reviewer_command in /config." ;;
+      reviewer) say "$gm_slug is available; the reviewer uses $gm_current. Change reviewer_command and reviewer_name in /config." ;;
       alt) say "$gm_slug is available; the second-opinion model uses $gm_current. Change model_noncoding_alt in /config." ;;
     esac
   done

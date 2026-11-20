@@ -732,8 +732,8 @@ repo=$(new_project)
 
 # Unsaved, the settings are the defaults in plugin.json: gpt-6.2-sol and gpt-6.2-astra.
 with_codex "$(codex_home gpt-6.2-sol gpt-6.2-astra gpt-6.3-sol gpt-6.1-sol codex-auto-review gpt-reserve)"
-assert_one_line 'gpt-6.3-sol is available; the reviewer uses gpt-6.2-sol. Change reviewer_command in /config.'
-assert_exit 0 test "$out" = 'dev-workflow: gpt-6.3-sol is available; the reviewer uses gpt-6.2-sol. Change reviewer_command in /config.'
+assert_one_line 'gpt-6.3-sol is available; the reviewer uses gpt-6.2-sol. Change reviewer_command and reviewer_name in /config.'
+assert_exit 0 test "$out" = 'dev-workflow: gpt-6.3-sol is available; the reviewer uses gpt-6.2-sol. Change reviewer_command and reviewer_name in /config.'
 
 with_codex "$(codex_home gpt-6.2-sol gpt-6.2-astra gpt-7-astra gpt-6-astra)"
 assert_exit 0 test "$out" = 'dev-workflow: gpt-7-astra is available; the second-opinion model uses gpt-6.2-astra. Change model_noncoding_alt in /config.'
@@ -759,7 +759,7 @@ assert_one_line 'gpt-6.3-sol is available; the reviewer uses gpt-6.2-sol.'
 CLAUDE_PLUGIN_OPTION_REVIEWER_COMMAND=$(reviewer_with '-m gpt-6.9-sol')
 CLAUDE_PLUGIN_OPTION_MODEL_NONCODING_ALT=gpt-6-astra
 with_codex "$(codex_home gpt-6.9-sol gpt-6.10-sol gpt-6-astra)"
-assert_exit 0 test "$out" = 'dev-workflow: gpt-6.10-sol is available; the reviewer uses gpt-6.9-sol. Change reviewer_command in /config.'
+assert_exit 0 test "$out" = 'dev-workflow: gpt-6.10-sol is available; the reviewer uses gpt-6.9-sol. Change reviewer_command and reviewer_name in /config.'
 with_codex "$(codex_home gpt-6.9-sol gpt-6.2-astra gpt-6-astra)"
 assert_exit 0 test "$out" = 'dev-workflow: gpt-6.2-astra is available; the second-opinion model uses gpt-6-astra. Change model_noncoding_alt in /config.'
 CLAUDE_PLUGIN_OPTION_REVIEWER_COMMAND=$(reviewer_with '-m gpt-6.10-sol')
