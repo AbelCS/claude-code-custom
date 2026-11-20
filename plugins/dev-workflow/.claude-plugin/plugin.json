@@ -1,7 +1,7 @@
 {
   "name": "dev-workflow",
   "description": "Sets up a repo with a full development methodology and enforces what must always hold: decisions, workflow, testing, code and tools",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "author": {
     "name": "AbelCS"
   },

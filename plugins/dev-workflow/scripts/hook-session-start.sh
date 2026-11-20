@@ -1,14 +1,15 @@
 #!/bin/sh
 # Runs when a session starts. Says what's wrong with this project's setup, one line each:
 # git hooks not active, a tool or plugin missing, a project file older than the plugin,
-# maintenance overdue, a newer GPT model for the reviewer or the second opinion. Claude
-# reads what this prints. Silent when all is well.
+# maintenance overdue, a newer GPT model for the reviewer or the second opinion. The lines
+# are shown to the person and given to Claude as context, in one JSON object, since plain
+# output would reach Claude alone. Silent when all is well.
 #
 # It must not get in the session's way. So it always exits 0, what it can't work out
 # becomes a line rather than an error, and it reads files rather than starting anything
 # slow. That's why gh is only looked for, not asked whether it's signed in.
 #
-# Claude reads this output as context, and a repo's files and settings are the repo's to
+# Claude reads these lines as context, and a repo's files and settings are the repo's to
 # write. So a line never repeats a value from them: only fixed text, the plugin's own
 # version, numbers worked out here, and model names in one strict shape.
 
@@ -331,16 +332,26 @@ check_gpt_models() {
   done
 }
 
-check_tools
-check_git_hooks
-if have jq; then
-  if _dw_is_one_object "$DW_PROJECT_FILE"; then
-    check_plugin_version
-    check_plugins
-  else
-    say ".claude/dev-workflow.json is broken: it must hold one valid JSON object. Fix it, or run /dev-workflow:setup to create it again."
+check_all() {
+  check_tools
+  check_git_hooks
+  if have jq; then
+    if _dw_is_one_object "$DW_PROJECT_FILE"; then
+      check_plugin_version
+      check_plugins
+    else
+      say ".claude/dev-workflow.json is broken: it must hold one valid JSON object. Fix it, or run /dev-workflow:setup to create it again."
+    fi
+    check_gpt_models
   fi
-  check_gpt_models
-fi
-check_maintenance
+  check_maintenance
+}
+
+# systemMessage shows the lines to the person, and additionalContext gives them to Claude.
+# The escaping is the shell's own, as jq may be what's missing.
+said=$(check_all)
+[ -n "$said" ] || exit 0
+_dw_json_escape "$said"
+printf '{"systemMessage":"%s","hookSpecificOutput":{"hookEventName":"SessionStart","additionalContext":"%s"}}\n' \
+  "$_dw_escaped" "$_dw_escaped"
 exit 0

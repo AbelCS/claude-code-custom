@@ -110,6 +110,7 @@ JSON
 #   tried          whether the model called a tool at all
 #   decision       what the first PreToolUse hook decided: ask, deny, none or failed
 #   start_said     what the session-start check printed
+#   start_shown    the lines it showed the person, if it gave Claude the same; or nothing
 session() {
   se_repo=$1
   se_plugin=$2
@@ -143,6 +144,9 @@ session() {
         else ((.output | fromjson? | .hookSpecificOutput.permissionDecision) // "none") end]
     | if length == 0 then "no hook" else .[0] end' "$log")
   start_said=$(jq -s -r '[.[] | select(.subtype == "hook_response" and (.hook_name | startswith("SessionStart"))) | .output] | join("")' "$log")
+  start_shown=$(printf '%s' "$start_said" | jq -r '
+    select(.hookSpecificOutput.hookEventName == "SessionStart" and .hookSpecificOutput.additionalContext == .systemMessage)
+    | .systemMessage | strings' 2>/dev/null)
 
   se_cost=$(jq -r 'select(.type == "result") | .total_cost_usd' "$log")
   total_cost=$(awk -v a="$total_cost" -v b="${se_cost:-0}" 'BEGIN { printf "%.4f", a + b }')

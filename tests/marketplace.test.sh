@@ -31,7 +31,7 @@ assert_exit 0 jq -e '[.plugins[] | has("version")] | any | not' "$marketplace"
 # --- plugin.json
 
 assert_exit 0 jq -e '
-  .version == "1.1.0"
+  .version == "1.1.1"
   and .license == "MIT"
   and .author == {"name": "AbelCS"}
 ' "$manifest"

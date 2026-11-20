@@ -111,8 +111,8 @@ record 'a workflow with a per-PR trigger' ask no "$(exists "$repo" .github/workf
 repo=$(live_repo with-project)
 run_command "$repo" "$plugin" 'touch plain-ran' --allowedTools Bash
 record 'an ordinary command' none yes "$(exists "$repo" plain-ran)"
-case $start_said in
-  *'dev-workflow: '*'git config core.hooksPath .githooks'*) echo 'session start: said the git hooks are off' ;;
+case $start_shown in
+  *'dev-workflow: '*'git config core.hooksPath .githooks'*) echo 'session start: said the git hooks are off, to the person and to Claude' ;;
   *)
     echo "session start: FAILED: it said: $start_said"
     failures=$((failures + 1))
