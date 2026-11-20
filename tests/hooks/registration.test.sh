@@ -64,17 +64,19 @@ assert_exit 0 jq -e '
     "model_docs", "effort_docs", "model_noncoding", "model_noncoding_alt", "model_coding", "effort_coding",
     "reviewer_name", "reviewer_command", "review_threshold_lines", "maintenance_interval_days"
   ] | sort)
-  and .userConfig.model_docs.default == "claude-sonnet-5-5"
+  and .userConfig.model_docs.default == "sonnet"
   and .userConfig.effort_docs.default == "high"
   and (.userConfig.model_docs.description | test("README"))
-  and .userConfig.model_noncoding.default == "claude-fable-5-1"
+  and .userConfig.model_noncoding.default == "fable"
   and (.userConfig.model_noncoding.description | test("research") and test("product") and test("design critique"))
   and (.userConfig.model_noncoding_alt.description | test("research") and test("product") and test("design critique"))
-  and .userConfig.model_noncoding_alt.default == "gpt-6-astra"
-  and .userConfig.model_coding.default == "claude-opus-5-5"
+  and .userConfig.model_noncoding_alt.default == "gpt-6.2-astra"
+  and .userConfig.model_coding.default == "opus"
   and .userConfig.effort_coding.default == "high"
-  and .userConfig.reviewer_name.default == "GPT-6.1 Sol (OpenAI, high effort, read-only)"
-  and .userConfig.reviewer_command.default == "codex exec -m gpt-6.1-sol -c model_reasoning_effort=high --sandbox read-only \"<brief>\" < /dev/null"
+  and ([.userConfig.model_coding, .userConfig.model_docs, .userConfig.model_noncoding]
+    | map(.description | test("latest") and test("full model name")) | all)
+  and .userConfig.reviewer_name.default == "GPT-6.2 Sol (OpenAI, high effort, read-only)"
+  and .userConfig.reviewer_command.default == "codex exec -m gpt-6.2-sol -c model_reasoning_effort=high --sandbox read-only \"<brief>\" < /dev/null"
   and .userConfig.review_threshold_lines.default == 300
   and .userConfig.maintenance_interval_days.default == 30
   and .userConfig.review_threshold_lines.type == "number"

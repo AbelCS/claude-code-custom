@@ -308,6 +308,10 @@ maintain|${user_config.maintenance_interval_days}
 maintain|money rules or permissions
 maintain|placeholder rather than a value
 maintain|1.0.0 or later has a README and docs
+maintain|a newer reviewer or second-opinion model is available, as the session-start check does
+maintain|${user_config.model_noncoding_alt}
+maintain|models_cache.json
+maintain|change none
 enable-releases|github.com
 enable-releases|Conventional Commits
 enable-releases|Stop and ask before overwriting
