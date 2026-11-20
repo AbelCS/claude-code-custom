@@ -38,6 +38,7 @@ Tools needed: `git`, `gh`, `jq`, `uvx` and `claude` (Claude Code 2.1.295 or late
 | `docs/superpowers/specs/`, `docs/superpowers/plans/` | Approved specs and plans |
 | `README.md` | The public README: install, update, settings, upgrade notes |
 | `docs/decisions.md`, `docs/maintenance.md` | The decision log, and the maintenance record that `/dev-workflow:maintain` adds a line to |
+| `docs/workflow-guide.md` | A guide to the workflow projects using the plugin follow: the steps, the variations, and what runs underneath |
 | `docs/hook-behaviour.md` | What the plugin's hooks and installs were seen to do in real sessions, from the live and install tests |
 
 ## Glossary

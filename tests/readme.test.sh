@@ -47,6 +47,23 @@ for dir in "$ROOT"/plugins/dev-workflow/skills/*/; do
   assert_contains "$text" "\`/dev-workflow:$(basename "$dir")\`"
 done
 
+# --- the workflow guide
+
+guide="$ROOT/docs/workflow-guide.md"
+assert_contains "$text" "docs/workflow-guide.md"
+[ -f "$guide" ] || _assert_fail "docs/workflow-guide.md is missing"
+guide_text=$(cat "$guide")
+assert_contains "$guide_text" '```mermaid'
+for heading in "## At a glance" "## The steps" "## Variations" "## Occasional routines" "## When something stops you" "## Models" "## Words used"; do
+  assert_contains "$guide_text" "$heading"
+done
+for step in "### 1. Issue" "### 2. Branch" "### 3. Think" "### 4. Build, test first" "### 5. Commit" "### 6. Push" "### 7. Land" "### 8. Merged"; do
+  assert_contains "$guide_text" "$step"
+done
+guide_lower=$(printf '%s\n' "$guide_text" | tr '[:upper:]' '[:lower:]')
+assert_not_contains "$guide_lower" "co-authored-by"
+assert_not_contains "$guide_lower" "generated with"
+
 # --- guardrails, and what was tested
 
 assert_contains "$text" "docs/hook-behaviour.md"
