@@ -1,7 +1,7 @@
 {
   "name": "dev-workflow",
   "description": "Sets up a repo with a full development methodology and enforces what must always hold: decisions, workflow, testing, code and tools",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "author": {
     "name": "AbelCS"
   },
@@ -10,20 +10,20 @@
     "model_noncoding": {
       "type": "string",
       "title": "Model for non-coding work",
-      "description": "The model for research, product thinking, design critique, specs and plans",
-      "default": "claude-fable-5-1"
+      "description": "The model for research, product thinking, design critique, specs and plans. The default follows the latest Fable model; a full model name can be set instead",
+      "default": "fable"
     },
     "model_noncoding_alt": {
       "type": "string",
       "title": "Alternative model for non-coding work",
       "description": "A second opinion on research, product thinking, design critique, specs and plans, from OpenAI through the Codex CLI",
-      "default": "gpt-6-astra"
+      "default": "gpt-6.2-astra"
     },
     "model_docs": {
       "type": "string",
       "title": "Model for docs",
-      "description": "The model for docs, READMEs and similar writing",
-      "default": "claude-sonnet-5-5"
+      "description": "The model for docs, READMEs and similar writing. The default follows the latest Sonnet model; a full model name can be set instead",
+      "default": "sonnet"
     },
     "effort_docs": {
       "type": "string",
@@ -34,8 +34,8 @@
     "model_coding": {
       "type": "string",
       "title": "Model for coding",
-      "description": "The model for writing code",
-      "default": "claude-opus-5-5"
+      "description": "The model for writing code. The default follows the latest Opus model; a full model name can be set instead",
+      "default": "opus"
     },
     "effort_coding": {
       "type": "string",
@@ -47,13 +47,13 @@
       "type": "string",
       "title": "Reviewer's name",
       "description": "Shown when announcing an independent review",
-      "default": "GPT-6.1 Sol (OpenAI, high effort, read-only)"
+      "default": "GPT-6.2 Sol (OpenAI, high effort, read-only)"
     },
     "reviewer_command": {
       "type": "string",
       "title": "Reviewer command",
       "description": "The command that runs an independent review, with <brief> where the brief goes",
-      "default": "codex exec -m gpt-6.1-sol -c model_reasoning_effort=high --sandbox read-only \"<brief>\" < /dev/null"
+      "default": "codex exec -m gpt-6.2-sol -c model_reasoning_effort=high --sandbox read-only \"<brief>\" < /dev/null"
     },
     "review_threshold_lines": {
       "type": "number",

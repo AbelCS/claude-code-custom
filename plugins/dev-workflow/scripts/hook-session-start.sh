@@ -1,7 +1,8 @@
 #!/bin/sh
 # Runs when a session starts. Says what's wrong with this project's setup, one line each:
 # git hooks not active, a tool or plugin missing, a project file older than the plugin,
-# maintenance overdue. Claude reads what this prints. Silent when all is well.
+# maintenance overdue, a newer GPT model for the reviewer or the second opinion. Claude
+# reads what this prints. Silent when all is well.
 #
 # It must not get in the session's way. So it always exits 0, what it can't work out
 # becomes a line rather than an error, and it reads files rather than starting anything
@@ -9,7 +10,7 @@
 #
 # Claude reads this output as context, and a repo's files and settings are the repo's to
 # write. So a line never repeats a value from them: only fixed text, the plugin's own
-# version, and numbers worked out here.
+# version, numbers worked out here, and model names in one strict shape.
 
 # Nothing outside the shell before the project file is found: see common.sh.
 case $0 in
@@ -266,6 +267,70 @@ check_maintenance() {
     say "maintenance is overdue: the last run was $age days ago, and it's due every $interval days. Run /dev-workflow:maintain."
 }
 
+# --- Newer GPT models
+
+# Sets model_in_use to the value of -m or --model in a command, or to nothing.
+read_model_flag() {
+  model_in_use=
+  rm_noglob=
+  case $- in *f*) rm_noglob=1 ;; esac
+  set -f
+  # shellcheck disable=SC2086 # Split into words, as the command would be.
+  set -- $1
+  [ -n "$rm_noglob" ] || set +f
+  while [ "$#" -gt 0 ]; do
+    case $1 in
+      -m | --model)
+        [ "$#" -gt 1 ] && model_in_use=$2
+        return 0
+        ;;
+      -m=* | --model=*)
+        model_in_use=${1#*=}
+        return 0
+        ;;
+    esac
+    shift
+  done
+}
+
+# The reviewer and the second opinion run through Codex, so Codex's own list of models,
+# which it caches, says when a newer one is out. That cache isn't a published interface,
+# so anything unexpected in it, or no Codex at all, means nothing to say. The settings
+# come from the person's /config, or plugin.json's defaults when unsaved, which leaves them
+# empty here. Only slugs in the strict shape that gpt-models.jq allows are ever printed.
+check_gpt_models() {
+  gm_cache=${CODEX_HOME:-$HOME/.codex}/models_cache.json
+  [ -f "$gm_cache" ] && [ -r "$gm_cache" ] || return 0
+  [ -r "$scripts_dir/lib/gpt-models.jq" ] || return 0
+
+  gm_reviewer=${CLAUDE_PLUGIN_OPTION_REVIEWER_COMMAND:-}
+  gm_alt=${CLAUDE_PLUGIN_OPTION_MODEL_NONCODING_ALT:-}
+  gm_manifest=$scripts_dir/../.claude-plugin/plugin.json
+  [ -n "$gm_reviewer" ] ||
+    gm_reviewer=$(jq -r '.userConfig.reviewer_command.default | strings' "$gm_manifest" 2>/dev/null)
+  [ -n "$gm_alt" ] ||
+    gm_alt=$(jq -r '.userConfig.model_noncoding_alt.default | strings' "$gm_manifest" 2>/dev/null)
+  read_model_flag "$gm_reviewer"
+
+  gm_newer=$(jq -rs -L "$scripts_dir/lib" --arg reviewer "$model_in_use" --arg alt "$gm_alt" '
+    include "gpt-models";
+    select(length == 1 and (.[0] | type == "object")) | .[0]
+    | (newer_than($reviewer) | "reviewer \(.) \($reviewer)"),
+      (newer_than($alt) | "alt \(.) \($alt)")' "$gm_cache" 2>/dev/null) || return 0
+
+  printf '%s\n' "$gm_newer" | while read -r gm_role gm_slug gm_current gm_extra; do
+    # What gpt-models.jq lets through, checked again before it's printed.
+    case $gm_slug$gm_current in *[!a-z0-9.-]*) continue ;; esac
+    case $gm_slug in gpt-*) ;; *) continue ;; esac
+    case $gm_current in gpt-*) ;; *) continue ;; esac
+    [ -z "$gm_extra" ] || continue
+    case $gm_role in
+      reviewer) say "$gm_slug is available; the reviewer uses $gm_current. Change reviewer_command and reviewer_name in /config." ;;
+      alt) say "$gm_slug is available; the second-opinion model uses $gm_current. Change model_noncoding_alt in /config." ;;
+    esac
+  done
+}
+
 check_tools
 check_git_hooks
 if have jq; then
@@ -275,6 +340,7 @@ if have jq; then
   else
     say ".claude/dev-workflow.json is broken: it must hold one valid JSON object. Fix it, or run /dev-workflow:setup to create it again."
   fi
+  check_gpt_models
 fi
 check_maintenance
 exit 0

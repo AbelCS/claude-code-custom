@@ -107,7 +107,7 @@ Two layers check the rules. Both do nothing in a repo that hasn't run `/dev-work
 | Commands | Before each Bash command | Blocks a merge chained after tests, a local merge into the default branch, `--no-verify` on commits, AI attribution in `gh` text, a pull request title without the right format or a closing keyword, and a squash merge without a blank message. Asks for a person's yes before a database reset |
 | GitHub tools | Before each GitHub MCP call | Blocks AI attribution, and merging that way |
 | Workflow edits | Before each file write and edit | Asks for a person's yes before a workflow gains a per-pull-request trigger |
-| Session start | Every session in a set-up project | Prints one line for each problem: git hooks off, a tool or plugin missing, rules out of date, maintenance overdue. It is silent when all is well |
+| Session start | Every session in a set-up project | Prints one line for each problem: git hooks off, a tool or plugin missing, rules out of date, maintenance overdue, a newer GPT model available. It is silent when all is well |
 
 **What you see.** A block is a message that says why and what to do instead. You see it as the command's result, and Claude acts on it. Two examples:
 
@@ -132,16 +132,20 @@ The plugin has ten settings. Skills and hooks read them, so no model name is wri
 
 | Key | Default | What it's for |
 |---|---|---|
-| `model_noncoding` | `claude-fable-5-1` | Research, product thinking, design critique, specs and plans |
-| `model_noncoding_alt` | `gpt-6-astra` | A second opinion on the same work, from OpenAI through the Codex CLI |
-| `model_docs` | `claude-sonnet-5-5` | Docs, READMEs and similar writing |
+| `model_noncoding` | `fable` | Research, product thinking, design critique, specs and plans |
+| `model_noncoding_alt` | `gpt-6.2-astra` | A second opinion on the same work, from OpenAI through the Codex CLI |
+| `model_docs` | `sonnet` | Docs, READMEs and similar writing |
 | `effort_docs` | `high` | Reasoning effort for docs |
-| `model_coding` | `claude-opus-5-5` | Writing code |
+| `model_coding` | `opus` | Writing code |
 | `effort_coding` | `high` | Reasoning effort for code |
-| `reviewer_name` | `GPT-6.1 Sol (OpenAI, high effort, read-only)` | Shown when an independent review is announced |
-| `reviewer_command` | `codex exec -m gpt-6.1-sol -c model_reasoning_effort=high --sandbox read-only "<brief>" < /dev/null` | The command that runs an independent review, with `<brief>` where the brief goes |
+| `reviewer_name` | `GPT-6.2 Sol (OpenAI, high effort, read-only)` | Shown when an independent review is announced |
+| `reviewer_command` | `codex exec -m gpt-6.2-sol -c model_reasoning_effort=high --sandbox read-only "<brief>" < /dev/null` | The command that runs an independent review, with `<brief>` where the brief goes |
 | `review_threshold_lines` | `300` | A pull request with more changed lines than this gets an independent review |
 | `maintenance_interval_days` | `30` | The session-start check says maintenance is overdue after this many days |
+
+The Claude settings use Claude Code's aliases (`opus`, `sonnet`, `fable`), which follow the latest model in each family. You can set a full model name instead.
+
+The GPT settings name exact models, so a review always says which model ran. When Codex lists a newer Sol or Astra, the session-start check and `/dev-workflow:maintain` say so in one line. Nothing is switched automatically.
 
 ### How to change a default
 
@@ -161,7 +165,9 @@ The first and third are commands inside Claude Code. The second runs in your ter
 
 ### Upgrade notes
 
-For people coming from 0.x or from `web-dev-workflow`.
+- 1.1.0: the model defaults changed. The Claude ones now follow the latest model in each family, and the GPT ones are 6.2 Sol and Astra. Settings you saved are kept. Run the usual update steps above.
+
+For people coming from 0.x or from `web-dev-workflow`:
 
 - `/web-dev-workflow:setup` and `/dev-workflow:enable-github-issues` are gone. Use `/dev-workflow:setup` for both.
 - If you used `web-dev-workflow`, run `claude plugin install dev-workflow@claude-code-custom` once, after `/plugin marketplace update claude-code-custom`. The marketplace renames the old plugin, but without this step the new one is turned on and doesn't load ("not cached"). Use `install` here and not `update`: `update` can fix only the project you run it in. A project whose committed `.claude/settings.json` named `web-dev-workflow` has that key rewritten the first time a session runs there, which leaves a change to commit.
