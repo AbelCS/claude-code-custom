@@ -1,6 +1,7 @@
 #!/bin/sh
 # Tests the session-start check through the real script, in real repos: silent when all
-# is well, one line for each thing wrong, and never a failure.
+# is well, one line for each thing wrong, shown to the person and given to Claude, and
+# never a failure.
 
 ROOT=$(cd "$(dirname "$0")/../.." && pwd)
 # shellcheck source=tests/lib/assert.sh
@@ -66,20 +67,48 @@ new_project() {
   printf '%s\n' "$np_dir"
 }
 
+# Outside the session's PATH, so it reads the output even when the session had no jq.
+parser=$(command -v jq)
+
+# read_said: sets out to the lines the check gave, from raw, what it printed. That must be
+# nothing, or one JSON object and nothing else that shows the lines to the person and
+# gives the same text to Claude, each line starting with the plugin's name.
+read_said() {
+  out=
+  [ -n "$raw" ] || return 0
+  case $raw in
+    '{'*'}') ;;
+    *) _assert_fail "expected one JSON object, got: $raw" ;;
+  esac
+  # shellcheck disable=SC2016 # jq's dollars.
+  printf '%s' "$raw" | "$parser" -se '
+    length == 1 and (.[0] | type == "object") and .[0] as $o
+    | ($o | keys) == ["hookSpecificOutput", "systemMessage"]
+    and ($o.hookSpecificOutput | keys) == ["additionalContext", "hookEventName"]
+    and $o.hookSpecificOutput.hookEventName == "SessionStart"
+    and ($o.systemMessage | type) == "string"
+    and $o.hookSpecificOutput.additionalContext == $o.systemMessage
+    and ($o.systemMessage | split("\n") | all(startswith("dev-workflow: ")))' >/dev/null ||
+    _assert_fail "expected the lines shown to the person and given to Claude, got: $raw"
+  out=$(printf '%s' "$raw" | "$parser" -r '.systemMessage')
+}
+
 # start <folder> [hook script]: runs the check from that folder as Claude Code does, with
-# <folder> as the project unless project_dir says otherwise. Sets out. It must exit 0 and
-# leave stderr empty. Takes its environment from bin, home and project_dir.
+# <folder> as the project unless project_dir says otherwise. Sets raw and out, as read_said
+# does. It must exit 0 and leave stderr empty. Takes its environment from bin, home and
+# project_dir.
 errors="$(tmp_dir)/errors"
 project_dir=
 start() {
-  if ! out=$(cd "$1" && HOME=$home PATH=$bin CLAUDE_PROJECT_DIR=${project_dir:-$1} "$shell_path" "${2:-$hook}" </dev/null 2>"$errors"); then
-    _assert_fail "the check failed in $1: $out $(cat "$errors")"
+  if ! raw=$(cd "$1" && HOME=$home PATH=$bin CLAUDE_PROJECT_DIR=${project_dir:-$1} "$shell_path" "${2:-$hook}" </dev/null 2>"$errors"); then
+    _assert_fail "the check failed in $1: $raw $(cat "$errors")"
   fi
   [ ! -s "$errors" ] || _assert_fail "the check wrote to stderr in $1: $(cat "$errors")"
+  read_said
 }
 
 assert_silent() {
-  [ -z "$out" ] || _assert_fail "expected no output, got: $out"
+  [ -z "$raw" ] || _assert_fail "expected no output, got: $raw"
 }
 
 # assert_one_line <text>...: exactly one line, starting with the plugin's name and holding
@@ -129,8 +158,8 @@ project_dir="$not_a_repo/gone"
 start "$not_a_repo"
 assert_silent
 project_dir=
-out=$(cd "$plain" && unset CLAUDE_PROJECT_DIR && HOME=$home PATH=$bin "$shell_path" "$hook" </dev/null 2>&1) ||
-  _assert_fail "the check failed with no project variable: $out"
+raw=$(cd "$plain" && unset CLAUDE_PROJECT_DIR && HOME=$home PATH=$bin "$shell_path" "$hook" </dev/null 2>&1) ||
+  _assert_fail "the check failed with no project variable: $raw"
 assert_silent
 
 # A nested repo doesn't take its parent's project file.
@@ -143,8 +172,9 @@ bin=$saved_bin
 # Without the variable it goes by where it's run.
 repo=$(new_project)
 git -C "$repo" config --unset core.hooksPath
-out=$(cd "$repo" && unset CLAUDE_PROJECT_DIR && HOME=$home PATH=$bin "$shell_path" "$hook" </dev/null) ||
-  _assert_fail "the check failed with no project variable: $out"
+raw=$(cd "$repo" && unset CLAUDE_PROJECT_DIR && HOME=$home PATH=$bin "$shell_path" "$hook" </dev/null) ||
+  _assert_fail "the check failed with no project variable: $raw"
+read_said
 assert_one_line 'git config core.hooksPath .githooks'
 
 # --- Git hooks
@@ -574,6 +604,16 @@ assert_contains "$out" 'brew install jq'
 assert_contains "$out" 'git config core.hooksPath .githooks'
 assert_contains "$out" '/dev-workflow:maintain'
 assert_exit 0 test "$(printf '%s\n' "$out" | wc -l)" -eq 3
+
+# Without jq the output is still one valid JSON object, read here by a parser outside the
+# session's PATH, with the quotes in the maintenance line escaped.
+repo=$(new_project)
+set_last_run "$repo" '- an undated run'
+start "$repo"
+assert_exit 0 test "$out" = 'dev-workflow: jq isn'"'"'t on the PATH, and this project'"'"'s checks need it. Install it: brew install jq, or apt-get install jq.
+dev-workflow: couldn'"'"'t read docs/maintenance.md: its last line should be a list item like "- YYYY-MM-DD: what was done".'
+assert_contains "$raw" '\"- YYYY-MM-DD'
+assert_contains "$raw" 'apt-get install jq.\ndev-workflow: '
 
 # Without git there's nothing to read a repo with, and that's its one line.
 bin=$(bin_with jq grep date)

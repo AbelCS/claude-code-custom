@@ -107,7 +107,7 @@ Two layers check the rules. Both do nothing in a repo that hasn't run `/dev-work
 | Commands | Before each Bash command | Blocks a merge chained after tests, a local merge into the default branch, `--no-verify` on commits, AI attribution in `gh` text, a pull request title without the right format or a closing keyword, and a squash merge without a blank message. Asks for a person's yes before a database reset |
 | GitHub tools | Before each GitHub MCP call | Blocks AI attribution, and merging that way |
 | Workflow edits | Before each file write and edit | Asks for a person's yes before a workflow gains a per-pull-request trigger |
-| Session start | Every session in a set-up project | Prints one line for each problem: git hooks off, a tool or plugin missing, rules out of date, maintenance overdue, a newer GPT model available. It is silent when all is well |
+| Session start | Every session in a set-up project | Prints one line for each problem: git hooks off, a tool or plugin missing, rules out of date, maintenance overdue, a newer GPT model available. You see these lines at the start of the session, and Claude gets them too. It is silent when all is well |
 
 **What you see.** A block is a message that says why and what to do instead. You see it as the command's result, and Claude acts on it. Two examples:
 
