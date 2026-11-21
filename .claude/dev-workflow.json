@@ -10,15 +10,15 @@
   },
   "versionFile": "plugins/dev-workflow/.claude-plugin/plugin.json",
   "managed": {
-    "AGENTS.md#decisions": "cfc90def87500688333620b0ebad01a62201ae92",
+    "AGENTS.md#decisions": "1cab50dcf05786ac56e4aa703bde0f964706cb8e",
     "AGENTS.md#workflow": "9c719bea43fc1ccb061f58a96431b88db9289fea",
-    "AGENTS.md#testing": "b190a1a38e01199b930be0ff27a360f290a9bfc6",
-    "AGENTS.md#tools": "a4f12ae6ae33260473b5a3d931b5a003ddb0b031",
+    "AGENTS.md#testing": "06b4cd282163e5603c93377f53273c36c950d9c2",
+    "AGENTS.md#tools": "d73b59a250284823e4c035197810178fa73c2080",
     "AGENTS.md#models": "60510d643c6e382a97cffebfb0195cba4e2f46d9",
     "AGENTS.md#communication": "d0161b1a4a529742557193c9c03adc0ded300295",
     ".githooks/dw-lib.sh": "e9b247188114350efa87a49131653b917e94cb35",
     ".githooks/commit-msg": "bc16ddc1e485a9b85aceace0790d8c7b07066b81",
-    ".githooks/pre-commit": "95b54988c28c4246a04e9981c78d7d7c98ead5cc",
+    ".githooks/pre-commit": "c1a269462b18260e3000c13531736b20d89f3214",
     ".githooks/pre-push": "0c14e1aad0bf7fba42e9126162bfb57ea2ef177f"
   }
 }

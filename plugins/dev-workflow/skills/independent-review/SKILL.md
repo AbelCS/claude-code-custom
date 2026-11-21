@@ -11,7 +11,7 @@ The settings below come from the plugin's `/config`. If one shows as a `user_con
 
 ## 1. Write the brief
 
-A narrow brief gets a useful review. It says:
+A narrow brief gets a useful review. When the caller gives one, such as `readiness` asking for a security review of the whole app, use it, and only check it against the rules below. Otherwise it says:
 
 - what changed and why, from the issue;
 - the files to read, by path, naming the files rather than "the repo": `git diff --name-only origin/<default>...HEAD` lists them;

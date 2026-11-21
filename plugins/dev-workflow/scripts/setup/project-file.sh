@@ -21,7 +21,7 @@
 #
 # The file is checked before anything is written, and not rewritten if nothing in it
 # changed. Known fields come in the schema's order, the ledger last. The env file sets
-# all four of the git hooks' settings, lists as newline-separated lines and the
+# all five of the git hooks' settings, lists as newline-separated lines and the
 # formatters as glob|command, each value quoted for sh.
 #
 # Exits 1 when validate finds problems, and 2 on any other error, writing nothing.
@@ -139,7 +139,7 @@ merge() {
     . as $old | $a[0] as $new
     | {schemaVersion: null, pluginVersion: null, stack: null, hasScreens: null,
        defaultBranch: null, commands: null, testCommands: null,
-       databaseResetCommands: null, ciAllowlist: null}
+       databaseResetCommands: null, ciAllowlist: null, secretsAllowlist: null}
       + $old + $new
     | del(.managed) + {schemaVersion: 1, pluginVersion: $v, managed: $old.managed}
     | if ($old.commands | type) == "object" and ($new.commands | type) == "object"
@@ -175,7 +175,8 @@ fi
     "DW_DEFAULT_BRANCH=\(.defaultBranch // "main" | @sh)",
     "DW_CHECK=\(.commands.check | @sh)",
     "DW_CI_ALLOWLIST=\(.ciAllowlist // [] | join("\n") | @sh)",
-    "DW_FORMATTERS=\(.commands.formatCheckStaged // [] | map("\(.glob)|\(.command)") | join("\n") | @sh)"
+    "DW_FORMATTERS=\(.commands.formatCheckStaged // [] | map("\(.glob)|\(.command)") | join("\n") | @sh)",
+    "DW_SECRETS_ALLOW=\(.secretsAllowlist // [] | join("\n") | @sh)"
   ' "$work/merged"
 } >"$work/env" || die "cannot generate the env file"
 

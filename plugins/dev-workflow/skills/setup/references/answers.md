@@ -47,6 +47,7 @@
 | `testCommands` | Commands that run the project's tests. |
 | `databaseResetCommands` | Commands that wipe a database, which the hooks hold for a person's yes. Only the project's own: the stack's come with it. |
 | `ciAllowlist` | Workflows allowed per-PR triggers. `project-file.sh existing-ci <root>` lists the ones that have them now, to offer. |
+| `secretsAllowlist` | Paths the `pre-commit` secrets check skips, as globs from the root, such as `tests/fixtures/*`, for files that look like a secret and aren't. Only when one is needed: leave it out otherwise. |
 | `versionFile` | The file that holds the version, by path from the root, as `detect.sh` suggests in `versionFiles`. After a merge, `land` tags the commit that set each version with the bare version, like `1.4.0`: a `.json` file's `version`, a `.toml` file's in `[project]`, `[package]`, `[tool.poetry]` or `[workspace.package]`, or any other file's first line. Leave it out when release-please tags versions, or when the project has none. |
 
 `schemaVersion`, `pluginVersion` and `managed` are setup's to set, and answers holding them are refused.

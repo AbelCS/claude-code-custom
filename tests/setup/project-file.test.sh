@@ -61,6 +61,12 @@ invalid '{"schemaVersion": 1, "pluginVersion": "1.0.0", "commands": {"check": "x
   "formatCheckStaged": [{"glob": "*.js|x", "command": "y"}]}}' "glob"
 assert_exit 2 sh "$PF" validate "$work/missing.json"
 
+# secretsAllowlist: globs, each on one line, for the env file's newline-separated list.
+invalid '{"schemaVersion": 1, "pluginVersion": "1.0.0", "commands": {"check": "x"}, "secretsAllowlist": ["a\nb"]}' "secretsAllowlist"
+invalid '{"schemaVersion": 1, "pluginVersion": "1.0.0", "commands": {"check": "x"}, "secretsAllowlist": [""]}' "secretsAllowlist"
+invalid '{"schemaVersion": 1, "pluginVersion": "1.0.0", "commands": {"check": "x"}, "secretsAllowlist": "tests/*"}' "secretsAllowlist"
+invalid '{"schemaVersion": 1, "pluginVersion": "1.0.0", "commands": {"check": "x"}, "secretsAllowlist": ["*.{pem,key}"]}' "one glob per"
+
 # versionFile: a file's path from the repo's root, which can't lead out of it.
 printf '%s\n' '{"schemaVersion": 1, "pluginVersion": "1.0.0", "commands": {"check": "x"}, "versionFile": "plugins/app/.claude-plugin/plugin.json"}' >"$work/version.json"
 assert_exit 0 sh "$PF" validate "$work/version.json"
@@ -87,7 +93,8 @@ cat >"$work/mixed-answers.json" <<'JSON'
   },
   "testCommands": ["npm test"],
   "ciAllowlist": [".github/workflows/release check.yml", ".github/workflows/it's.yml"],
-  "versionFile": "package.json"
+  "versionFile": "package.json",
+  "secretsAllowlist": ["tests/fixtures/*", "*.example.pem"]
 }
 JSON
 out=$(run write "$r" "$work/mixed-answers.json")
@@ -101,6 +108,7 @@ env=$r/.githooks/dev-workflow.env
 assert_exit 0 test "$(env_value "$env" DW_FORMATTERS)" = "$(printf '*.ts|npx prettier --check\n*.py|ruff format --check')"
 assert_exit 0 test "$(env_value "$env" DW_CHECK)" = "echo \"it's ok\" &&  make  check"
 assert_exit 0 test "$(env_value "$env" DW_DEFAULT_BRANCH)" = trunk
+assert_exit 0 test "$(env_value "$env" DW_SECRETS_ALLOW)" = "$(printf 'tests/fixtures/*\n*.example.pem')"
 assert_exit 0 test "$(env_value "$env" DW_CI_ALLOWLIST)" = "$(printf ".github/workflows/release check.yml\n.github/workflows/it's.yml")"
 assert_exit 0 sh -n "$env"
 assert_contains "$out" '"path":".claude/dev-workflow.json"'
@@ -115,6 +123,7 @@ assert_contains "$pf_text" '
     ".github/workflows/release check.yml",
     ".github/workflows/it'"'"'s.yml"
   ],
+  "secretsAllowlist": ["tests/fixtures/*", "*.example.pem"],
   "versionFile": "package.json"
 }'
 
@@ -126,14 +135,14 @@ assert_file_same "$r/.claude/dev-workflow.json" "$work/mixed-pf"
 assert_file_same "$env" "$work/mixed-env"
 assert_exit 0 test "$(printf '%s\n' "$out" | jq -r .action | sort -u)" = keep
 
-# --- the env file always sets all four keys, even with empty lists
+# --- the env file always sets all five keys, even with empty lists
 
 r=$work/empty-lists
 mkdir -p "$r"
 printf '{"commands": {"check": "make check"}}\n' >"$work/empty-answers.json"
 run write "$r" "$work/empty-answers.json" >/dev/null
 env=$r/.githooks/dev-workflow.env
-for key in DW_DEFAULT_BRANCH DW_CHECK DW_CI_ALLOWLIST DW_FORMATTERS; do
+for key in DW_DEFAULT_BRANCH DW_CHECK DW_CI_ALLOWLIST DW_FORMATTERS DW_SECRETS_ALLOW; do
   assert_exit 0 grep -q "^$key=" "$env"
 done
 assert_exit 0 test "$(env_value "$env" DW_DEFAULT_BRANCH)" = main

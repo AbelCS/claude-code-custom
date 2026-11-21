@@ -6,8 +6,10 @@
 # becomes the squash commit's subject. Prints one line:
 #   raised <old> <new>          wrote the new version, and committed it on this branch
 #   unchanged <type>: ...       a type that changes no version, such as docs or chore
-#   skip <reason>: ...          release-please, no versionFile, a pre-release version, or
-#                               a version already raised in this branch
+#   skip <reason>: ...          release-please, no versionFile, a pre-release version, a
+#                               first version file, or a version already raised in this
+#                               branch, which, from below 1.0.0 to 1.0.0 or above, needs
+#                               its entry in docs/readiness.md
 #
 # The bump is release-please's: feat raises the minor, fix and perf the patch, and a ! before
 # the colon, on any type, the major. Before 1.0.0 it's one step lower: a breaking change
@@ -47,6 +49,8 @@ here=$(dirname -- "$0")
 . "$here/../lib/version-file.sh"
 # shellcheck source=plugins/dev-workflow/scripts/lib/version.sh
 . "$here/../lib/version.sh"
+# shellcheck source=plugins/dev-workflow/scripts/lib/readiness.sh
+. "$here/../lib/readiness.sh"
 
 g() {
   git -C "$root" "$@"
@@ -108,6 +112,14 @@ if [ "$current" != "$old" ]; then
   if version_is_older "$current_parts" "$old_parts" ||
     { [ "$current_parts" = "$old_parts" ] && case $current in *-*) true ;; *) false ;; esac; }; then
     fail "$file holds $current, which is lower than $old on origin/$default: raise it, or put back $old and run this again"
+  fi
+  # Going stable is a deliberate step, and it passes the readiness review first: its
+  # entry in docs/readiness.md, as committed on this branch. A candidate such as
+  # 1.0.0-rc.1 still comes before 1.0.0, so it isn't gated, and the step from it is.
+  if readiness_before_stable "$old" && readiness_is_stable "$current"; then
+    if ! g show "HEAD:docs/readiness.md" 2>/dev/null | readiness_has_entry "$current"; then
+      fail "$current is the first stable version, which needs its readiness review first: run /dev-workflow:readiness, which records it in docs/readiness.md"
+    fi
   fi
   echo "skip already-raised: $current, against $old on origin/$default"
   exit 0

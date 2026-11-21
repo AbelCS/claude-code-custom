@@ -85,5 +85,6 @@ DW_DEFAULT_BRANCH='main'
 DW_CHECK='scripts/check'
 DW_CI_ALLOWLIST=''
 DW_FORMATTERS=''
+DW_SECRETS_ALLOW=''
 ENV
 assert_file_same "$ROOT/.githooks/dev-workflow.env" "$expected_env"

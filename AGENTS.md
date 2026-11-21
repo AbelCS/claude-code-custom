@@ -69,7 +69,7 @@ What the managed sections below say, as it applies here:
 - Versions follow SemVer, through the `version` in each plugin's `plugin.json`, which is this repo's `versionFile`. `land` raises it and tags it like any project's. This repo publishes no GitHub Releases: plugin updates read `plugin.json` on `main`.
 - GitHub enforces the merge rules on the repo: squash-only merges, the pull request title as the subject, a blank message, and merged branches deleted. Set on 2026-11-06.
 - `tests/run.sh` runs test files all at once, so each one uses only its own temp folders.
-- The managed sections come from this repo's own plugin, through `/dev-workflow:setup`. A change to the rules goes in the plugin's templates, in `plugins/dev-workflow/skills/setup/templates/agents/`, and reaches this file when setup runs again after the release.
+- The managed sections and `.githooks/` come from this repo's own plugin, through `/dev-workflow:setup`. A change to the rules or the git hooks goes in the plugin's templates, in `plugins/dev-workflow/skills/setup/templates/`, and setup runs here from the working copy in the same pull request: `tests/repo.test.sh` checks that its plan here changes nothing.
 
 <!-- dev-workflow:begin decisions -->
 
@@ -81,6 +81,7 @@ What the managed sections below say, as it applies here:
 - Report honestly: run it, read the output, then claim it. Say what was skipped or failed.
 - `AGENTS.md` stays current, updated in the same pull request as the change.
 - A project gets a README and docs once it reaches a stable 1.0.0, or earlier if the owner asks for them. From then on they stay current, updated in the same pull request as the change.
+- Before 1.0.0, speed can come first. The first stable version passes `/dev-workflow:readiness` before it: security, dependencies, secrets in the history, docs, and data, monitoring, accessibility and performance where they apply. `land` won't raise to it without that review's entry in `docs/readiness.md`.
 - Anything regulated or specialised follows the real practice and vocabulary of the people who do that work. Research first, and label simplifications as trade-offs.
 - Use the latest stable versions, verified rather than remembered.
 
@@ -110,7 +111,9 @@ What the managed sections below say, as it applies here:
 ## Testing
 
 - Test first: every feature, bug fix, refactor and behaviour change, including screens through end-to-end tests of their flows. Most care goes to domain rules, permissions and money.
-- Tests run locally through git hooks: `pre-commit` checks the formatting of staged files, `commit-msg` checks the message, and `pre-push` runs `check`. Never skip them with `--no-verify`.
+- Tests run locally through git hooks: `pre-commit` refuses secrets and checks the formatting of staged files, `commit-msg` checks the message, and `pre-push` runs `check`. Never skip them with `--no-verify`.
+- Never commit a secret, at any stage: one committed stays in the history for good. A file that only looks like one, such as a test key, goes in `secretsAllowlist`.
+- From 1.0.0, `land` runs the dependency audit after `verify`, and a known critical or high vulnerability stops the merge.
 - CI runs only for releases. Never add per-PR pipelines.
 - `check` covers format, lint, typecheck and unit tests. `verify` adds database and end-to-end tests. Cache lint and format so they stay fast.
 - End-to-end tests have their own isolated stack, reset before each run, so they never touch the data the owner uses. Test suites sharing a stack don't run at the same time.
@@ -133,7 +136,7 @@ These rules override the defaults of the skills and plugins they name.
 - Serena for reading and changing code by symbol, moves and renames. No Serena memories: what's worth keeping goes in `AGENTS.md` or `docs/`.
 - A read-only database MCP on the local stack, when the database has one.
 - intent for UX thinking, ui-ux-pro-max for UI guidelines and accessibility checks. The project's own theme overrides their palettes and styles, and intent takes its context from this file and `docs/`.
-- `/security-review` for changes to permissions, sign-in or anything public.
+- `/security-review` for changes to permissions, sign-in or anything public, and from 1.0.0 for every larger pull request too.
 - Larger pull requests get `/dev-workflow:independent-review` before merging. Check each finding against the code before acting on it.
 - `/dev-workflow:maintain` for upkeep, run by a person when it's due.
 
