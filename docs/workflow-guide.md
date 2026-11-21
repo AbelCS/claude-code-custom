@@ -154,7 +154,7 @@ With no `check` command configured, it fails visibly instead of passing silently
    - A failure, reported and never worked around, such as a title that isn't a Conventional Commit.
 
    The bump comes from the title's type, as release-please's does: `feat` raises the minor, `fix` and `perf` the patch, a `!` before the colon the major, and other types nothing. Before 1.0.0 each step is one lower: a breaking change raises the minor, a feature the patch. The old version is the one on origin's default branch. If the default branch has moved on, `land` merges it into the branch first (a merge, so nothing pushed is rewritten), runs `verify` again, and raises the version again, so two pull requests can't claim the same number.
-7. **Merge when green.** Then, as its own command: `gh pr merge <n> --squash --subject "<title>" --body "" --delete-branch`.
+7. **Merge when green.** Then, as its own command: `gh pr merge <n> --squash --match-head-commit <head> --subject "<title>" --body "" --delete-branch`, where `<head>` is the commit that was checked, so a different head stops the merge.
 
 Claude Code hooks stand behind these. They block a merge chained after a test command, a local merge into the default branch, a squash merge without a blank message, a pull request title that isn't a Conventional Commit, a body without a closing keyword, and AI attribution in `gh` text. The default branch the local-merge rule protects is the one the project file names (`defaultBranch`), else origin's, else `main`.
 

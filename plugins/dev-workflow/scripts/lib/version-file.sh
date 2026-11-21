@@ -51,11 +51,16 @@ version_write() {
     *.json)
       # The first "version": "<old>". A nested one that comes first is caught by the read
       # back, which then refuses, rather than changing the wrong one.
+      # Each "version" key on a line in turn, as compact JSON can hold several.
       awk -v old="$vw_old" -v new="$vw_new" '
-        !done && match($0, /"version"[[:space:]]*:[[:space:]]*"/) {
-          start = RSTART + RLENGTH
-          if (substr($0, start, length(old) + 1) == old "\"") {
-            $0 = substr($0, 1, start - 1) new substr($0, start + length(old)); done = 1
+        !done {
+          seen = 0
+          while (!done && match(substr($0, seen + 1), /"version"[[:space:]]*:[[:space:]]*"/)) {
+            start = seen + RSTART + RLENGTH
+            if (substr($0, start, length(old) + 1) == old "\"") {
+              $0 = substr($0, 1, start - 1) new substr($0, start + length(old)); done = 1
+            }
+            seen = start - 1
           }
         }
         { print }' "$vw_path" >"$vw_tmp"
@@ -96,6 +101,12 @@ version_write() {
       return 1
     fi
   fi
-  # Over the original, so the file keeps its mode.
-  cat "$vw_tmp" >"$vw_path" && rm -f "$vw_tmp"
+  # Into a copy that keeps the original's mode, then renamed over it, so a failure part
+  # way leaves the original whole.
+  vw_copy=$vw_path.dw-version-copy.$$
+  if ! { cp -p "$vw_path" "$vw_copy" && cat "$vw_tmp" >"$vw_copy" && mv -f "$vw_copy" "$vw_path"; }; then
+    rm -f "$vw_tmp" "$vw_copy"
+    return 1
+  fi
+  rm -f "$vw_tmp"
 }

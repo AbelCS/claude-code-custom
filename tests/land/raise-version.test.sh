@@ -106,7 +106,40 @@ out=$(run 'feat: add search (#7)')
 assert_contains "$out" 'skip already-raised: 1.5.0'
 assert_exit 0 test "$(commits_on_branch)" = 2
 
-# --- Skipped, saying why
+# Lower than origin's, or no longer a version at all: refused, not taken as raised by hand.
+new_fixture VERSION 1.3.0
+printf '1.2.9\n' >"$repo/VERSION"
+git -C "$repo" commit -q -am 'chore: lower it (#7)'
+assert_exit 1 run 'feat: add search (#7)'
+assert_contains "$(run 'feat: add search (#7)' 2>&1)" 'lower'
+new_fixture VERSION 1.3.0
+printf '1.3.0-rc.1\n' >"$repo/VERSION"
+git -C "$repo" commit -q -am 'chore: a pre-release of the same (#7)'
+assert_exit 1 run 'feat: add search (#7)'
+new_fixture package.json '{ "version": "1.3.0" }'
+printf '{ "name": "app" }\n' >"$repo/package.json"
+git -C "$repo" commit -q -am 'chore: lose the version (#7)'
+assert_exit 1 run 'feat: add search (#7)'
+
+# A first version file, added in this pull request: nothing on origin to raise from, so
+# its version is the first one, tagged after the merge.
+new_fixture VERSION 1.2.3
+git -C "$repo" switch -q main
+jq 'del(.versionFile)' "$repo/.claude/dev-workflow.json" >"$base/pf.json"
+cp "$base/pf.json" "$repo/.claude/dev-workflow.json"
+git -C "$repo" rm -q VERSION
+git -C "$repo" commit -q -am 'chore: no version yet'
+git -C "$repo" push -q origin main
+git -C "$repo" switch -q -c chore/8-versions
+printf '0.1.0\n' >"$repo/VERSION"
+jq '.versionFile = "VERSION"' "$base/pf.json" >"$repo/.claude/dev-workflow.json"
+git -C "$repo" add -A
+git -C "$repo" commit -q -m 'chore: add a version (#8)'
+assert_exit 0 run 'chore: add a version (#8)'
+assert_contains "$(run 'feat: add a version (#8)')" 'skip first-version: 0.1.0'
+assert_exit 0 test "$(git -C "$repo" rev-list --count origin/main..HEAD)" = 1
+
+# --- Skipped, saying why# --- Skipped, saying why
 
 new_fixture package.json '{ "version": "1.2.3" }'
 printf '{}\n' >"$repo/release-please-config.json"
@@ -114,6 +147,11 @@ git -C "$repo" add release-please-config.json
 git -C "$repo" commit -q -m 'chore: enable release-please (#7)'
 assert_contains "$(run 'feat: add search (#7)')" 'skip release-please'
 assert_exit 0 test "$(commits_on_branch)" = 2
+
+# A release-please config that isn't committed doesn't count: the merge won't have it.
+new_fixture package.json '{ "version": "1.2.3" }'
+printf '{}\n' >"$repo/release-please-config.json"
+assert_contains "$(run 'feat: add search (#7)')" 'raised 1.2.3 1.3.0'
 
 new_fixture package.json '{ "version": "1.2.3" }'
 jq 'del(.versionFile)' "$repo/.claude/dev-workflow.json" >"$base/pf.json"
@@ -142,6 +180,19 @@ assert_exit 1 run 'feat: add search (#7)'
 assert_contains "$(run 'feat: add search (#7)' 2>&1)" "origin/main"
 git -C "$repo" merge -q --no-edit origin/main
 assert_contains "$(run 'feat: add search (#7)')" 'raised 1.3.0 1.4.0'
+
+# A hook that refuses the release commit leaves nothing behind: the file as it was, and
+# nothing staged, so it can be run again.
+new_fixture VERSION 1.2.3
+mkdir "$base/hooks"
+printf '#!/bin/sh\nexit 1\n' >"$base/hooks/pre-commit"
+chmod +x "$base/hooks/pre-commit"
+git -C "$repo" config core.hooksPath "$base/hooks"
+assert_exit 1 run 'feat: add search (#7)'
+assert_exit 0 test "$(cat "$repo/VERSION")" = 1.2.3
+assert_exit 0 test -z "$(git -C "$repo" status --porcelain)"
+assert_exit 0 test "$(commits_on_branch)" = 1
+git -C "$repo" config --unset core.hooksPath
 
 # Uncommitted changes would go into the release commit, or be lost.
 new_fixture VERSION 1.2.3
@@ -226,6 +277,18 @@ cp "$repo/package.json" "$base/before.json"
 assert_exit 1 run 'feat: add search (#7)'
 assert_file_same "$repo/package.json" "$base/before.json"
 assert_exit 0 test "$(commits_on_branch)" = 1
+
+# Compact JSON with a nested version first on the same line: the top-level one changes.
+new_fixture package.json '{"meta":{"version":"0.1.0"},"version":"1.2.3"}'
+assert_contains "$(run 'feat: add search (#7)')" 'raised 1.2.3 1.3.0'
+printf '{"meta":{"version":"0.1.0"},"version":"1.3.0"}\n' >"$base/expected.json"
+assert_file_same "$repo/package.json" "$base/expected.json"
+
+# The file keeps its mode.
+new_fixture VERSION 1.2.3
+chmod 640 "$repo/VERSION"
+run 'feat: add search (#7)' >/dev/null
+assert_exit 0 test -n "$(find "$repo/VERSION" -perm 640)"
 
 # A branch without an issue number still gets a Conventional Commit.
 new_fixture VERSION 1.2.3 spike

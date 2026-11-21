@@ -159,7 +159,8 @@ while IFS='|' read -r skill needle; do
     *) _assert_fail "$skill doesn't say: $needle" ;;
   esac
 done <<'TABLE'
-land|gh pr merge <n> --squash --subject "<title>" --body "" --delete-branch
+land|gh pr merge <n> --squash --match-head-commit <head> --subject "<title>" --body "" --delete-branch
+land|tagged <new> <merge commit>
 land|--squash
 land|--body ""
 land|--delete-branch

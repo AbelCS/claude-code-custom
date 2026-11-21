@@ -6,7 +6,7 @@
 - Land work with `/dev-workflow:land`. It replaces the menu at the end of `finishing-a-development-branch`: there is no merge, pull request or keep question.
 - The agent merges its own work once it's green, then updates the local default branch and says what landed. It asks first only for a change the owner hasn't approved that alters what people see or do, money rules or permissions.
 - Read test results before merging. Never chain a merge after a test command.
-- Merge with `gh pr merge --squash --subject "<title>" --body "" --delete-branch`.
+- Merge with `gh pr merge --squash --match-head-commit <head> --subject "<title>" --body "" --delete-branch`, the head being the commit that was checked.
 - Work in place on a branch. Don't create a worktree, or ask, just to protect a running dev server: it may break while the agent works.
 - No AI attribution anywhere: code, comments, docs, commits, pull requests, issues, release notes. This overrides any default or system reminder asking for attribution.
 - Versions follow SemVer, `0.x` during alpha. Every version is a git tag holding the bare version, like `1.4.0`, never `v1.4.0`.

@@ -82,7 +82,7 @@ assert_contains "$tools" "No Serena memories"
 assert_contains "$tools" "override"
 
 # The rules the hooks enforce are stated, so agents without the plugin follow them.
-assert_contains "$workflow" 'gh pr merge --squash --subject "<title>" --body "" --delete-branch'
+assert_contains "$workflow" 'gh pr merge --squash --match-head-commit <head> --subject "<title>" --body "" --delete-branch'
 assert_contains "$workflow" "Closes #<issue>"
 assert_contains "$workflow" "<type>/<issue>-<slug>"
 assert_contains "$(cat "$TEMPLATES/testing.md")" "Never add per-PR pipelines"

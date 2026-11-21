@@ -45,6 +45,8 @@ project=$root/.claude/dev-workflow.json
 here=$(dirname -- "$0")
 # shellcheck source=plugins/dev-workflow/scripts/lib/version-file.sh
 . "$here/../lib/version-file.sh"
+# shellcheck source=plugins/dev-workflow/scripts/lib/version.sh
+. "$here/../lib/version.sh"
 
 g() {
   git -C "$root" "$@"
@@ -64,7 +66,8 @@ parsed=$(printf '%s\n' "$title" | awk '
 type=${parsed% *}
 bang=${parsed#* }
 
-if [ -e "$root/release-please-config.json" ]; then
+# As committed: a config left lying about uncommitted won't be in the merge.
+if g cat-file -e "HEAD:release-please-config.json" 2>/dev/null; then
   echo 'skip release-please: it raises the version when a release is cut'
   exit 0
 fi
@@ -83,13 +86,29 @@ base=refs/remotes/origin/$default
 g merge-base --is-ancestor "$base" HEAD ||
   fail "origin/$default has moved on since this branch: bring it in with git merge origin/$default, then try again"
 
-g cat-file -e "$base:$file" 2>/dev/null || fail "$file isn't on origin/$default"
+[ -f "$root/$file" ] || fail "$file is missing from this branch"
+current=$(version_parse "$file" <"$root/$file")
+printf '%s\n' "$current" | grep -Eqx "$version_semver" ||
+  fail "$file holds \"$current\", which isn't a bare SemVer version such as 1.4.0"
+
+# A version file this pull request adds: its version is the first, tagged after the merge.
+if ! g cat-file -e "$base:$file" 2>/dev/null; then
+  echo "skip first-version: $current is the first version in $file, and is tagged after the merge"
+  exit 0
+fi
 old=$(g show "$base:$file" | version_parse "$file")
 printf '%s\n' "$old" | grep -Eqx "$version_semver" ||
   fail "$file on origin/$default holds \"$old\", which isn't a bare SemVer version such as 1.4.0"
-[ -f "$root/$file" ] || fail "$file is missing from this branch"
-current=$(version_parse "$file" <"$root/$file")
+
+# Raised by hand already: kept, as long as it's higher. A pre-release of the same numbers
+# comes before the release itself.
 if [ "$current" != "$old" ]; then
+  read_version "$current" && current_parts=$version_parts
+  read_version "$old" && old_parts=$version_parts
+  if version_is_older "$current_parts" "$old_parts" ||
+    { [ "$current_parts" = "$old_parts" ] && case $current in *-*) true ;; *) false ;; esac; }; then
+    fail "$file holds $current, which is lower than $old on origin/$default: raise it, or put back $old and run this again"
+  fi
   echo "skip already-raised: $current, against $old on origin/$default"
   exit 0
 fi
@@ -138,7 +157,9 @@ issue=${issue%%-*}
 case $branch in
   */*-*) case $issue in '' | *[!0-9]*) ;; *) subject="$subject (#$issue)" ;; esac ;;
 esac
-if ! { g add -- ":(literal)$file" && g commit -q -m "$subject"; }; then
-  fail "could not commit the new version"
+# Only the version file goes in, and a refused commit leaves it as it was.
+if ! g commit -q -m "$subject" -- ":(literal)$file"; then
+  g restore --staged --worktree -- ":(literal)$file" 2>/dev/null
+  fail "could not commit the new version: $file is back to $old"
 fi
 echo "raised $old $new"
