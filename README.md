@@ -40,6 +40,8 @@ Check [Requirements](#requirements) for what you need first.
 
 ## A day with dev-workflow
 
+For every step in more detail, and the variations by kind of work, see the [workflow guide](docs/workflow-guide.md).
+
 Say you want to add search. You type almost nothing special: you describe the work.
 
 1. **Issue.** Ask Claude to open one, with an objective, scope and acceptance criteria. The rules ask for it before any meaningful work.
