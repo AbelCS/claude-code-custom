@@ -26,6 +26,8 @@
 #                   old "pointer", or "content"
 #   legacyBlocks    old blocks in either file: web-5, web-6, issues
 #   projectFile     whether .claude/dev-workflow.json exists
+#   versionFiles    the files at the root that can hold the project's version:
+#                   package.json, pyproject.toml, Cargo.toml and VERSION, if there
 
 die() {
   printf 'detect.sh: %s\n' "$*" >&2
@@ -162,6 +164,11 @@ list() { # <words or lines>: a JSON array of the non-empty ones
 projectFile=false
 if exists "$root/.claude/dev-workflow.json"; then projectFile=true; fi
 
+version_files=
+for name in package.json pyproject.toml Cargo.toml VERSION; do
+  if [ -f "$root/$name" ]; then version_files="$version_files $name"; fi
+done
+
 jq -n \
   --arg repo "$repo" \
   --argjson git "$git" \
@@ -177,6 +184,7 @@ jq -n \
   --arg claude "$claude" \
   --argjson found "$(list "$blocks")" \
   --argjson projectFile "$projectFile" \
+  --argjson versionFiles "$(list "$version_files")" \
   '{
     repo: $repo,
     git: $git,
@@ -191,5 +199,6 @@ jq -n \
     agents: $agents,
     claude: $claude,
     legacyBlocks: (["web-5", "web-6", "issues"] | map(select(. as $id | $found | index($id)))),
-    projectFile: $projectFile
+    projectFile: $projectFile,
+    versionFiles: $versionFiles
   }'

@@ -50,7 +50,7 @@ block() { # <version>: a whole published web block
 r=$(tmp_dir)/repo
 new_repo "$r"
 commit "$r"
-assert_field "$r" 'keys' '["agents","claude","defaultBranch","git","gitHooks","hookTool","hooksPath","hooksPathScope","languages","legacyBlocks","projectFile","remote","repo","stackHints"]'
+assert_field "$r" 'keys' '["agents","claude","defaultBranch","git","gitHooks","hookTool","hooksPath","hooksPathScope","languages","legacyBlocks","projectFile","remote","repo","stackHints","versionFiles"]'
 assert_field "$r" '[.repo, .git, .remote, .defaultBranch, .hookTool, .hooksPath, .hooksPathScope, .gitHooks, .agents, .claude, .projectFile]' '["existing",true,"none","main","none",null,null,[],false,"absent",false]'
 assert_field "$r" '[.stackHints, .languages, .legacyBlocks]' '[[],[],[]]'
 
@@ -181,6 +181,16 @@ mkdir "$r/supabase"
 touch "$r/supabase/config.toml"
 assert_field "$r" '.stackHints' '["supabase"]'
 rm -r "$r/supabase"
+
+# --- versionFiles: the files at the root that can hold the project's version
+
+r=$(tmp_dir)/versions
+mkdir -p "$r/sub"
+assert_field "$r" '.versionFiles' '[]'
+touch "$r/package.json" "$r/Cargo.toml" "$r/pyproject.toml" "$r/sub/VERSION"
+assert_field "$r" '.versionFiles' '["package.json","pyproject.toml","Cargo.toml"]'
+touch "$r/VERSION"
+assert_field "$r" '.versionFiles' '["package.json","pyproject.toml","Cargo.toml","VERSION"]'
 
 # A non-Node repo: no stack hints, only languages.
 r=$(tmp_dir)/python

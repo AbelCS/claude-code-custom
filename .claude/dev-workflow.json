@@ -1,10 +1,11 @@
 {
   "schemaVersion": 1,
-  "pluginVersion": "1.1.1",
+  "pluginVersion": "1.2.0",
   "stack": [],
   "hasScreens": false,
   "commands": {
     "check": "scripts/check",
     "verify": "scripts/verify"
-  }
+  },
+  "versionFile": "plugins/dev-workflow/.claude-plugin/plugin.json"
 }

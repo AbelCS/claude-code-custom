@@ -7,7 +7,7 @@ allowed-tools: Read Glob Grep Bash(git remote *) Bash(git log *) Bash(git status
 
 # Enable releases
 
-Say "Using enable-releases to ..." first. Releases follow SemVer, `0.x` during alpha, through release-please. Its workflow runs only when a person starts it: CI runs only for releases, never on every pull request. The templates are in `${CLAUDE_SKILL_DIR}/templates/`.
+Say "Using enable-releases to ..." first. Versions follow SemVer, `0.x` during alpha, and every version is a git tag holding the bare version, like `1.4.0`. This adds GitHub Releases on top, through release-please: it raises the version, tags it the same way, with no `v`, and publishes a Release with its changelog. Once its config exists, `land` stops tagging versions itself. Its workflow runs only when a person starts it: CI runs only for releases, never on every pull request. The templates are in `${CLAUDE_SKILL_DIR}/templates/`.
 
 Nothing is written before the person says yes to the plan.
 

@@ -26,7 +26,7 @@ Check [Requirements](#requirements) for what you need first.
 `/dev-workflow:setup` does this, once per project:
 
 - It reads the repo and checks the tools. It works on a new project, an existing one, or one set up with an older version.
-- It asks only what it can't read, one question at a time, with its recommendation first: the stack, the commands for `check` and `verify`, whether there are screens or a database, and a few approvals.
+- It asks only what it can't read, one question at a time, with its recommendation first: the stack, the commands for `check` and `verify`, the file that holds the project's version, whether there are screens or a database, and a few approvals.
 - It shows every file it would create or update, and every conflict it will leave alone. It writes nothing until you say yes.
 - After the yes, it writes `.claude/dev-workflow.json`, the rules in `AGENTS.md` and a `CLAUDE.md` that imports them, the git hooks in `.githooks/`, the attribution settings, and `docs/decisions.md` and `docs/maintenance.md` if they're missing. It also turns the git hooks on.
 - With your approval, it also sets the GitHub repo to squash-only merges with a blank message, and to delete merged branches.
@@ -47,7 +47,7 @@ Say you want to add search. You type almost nothing special: you describe the wo
 3. **Work.** Ask for the feature. Skills come in on their own: tests first, a failure debugged properly, code and screens built to the rules. You type nothing.
 4. **Commit.** Git runs `pre-commit`, which checks formatting of staged files and blocks a workflow gaining a per-PR trigger. Then `commit-msg` checks the subject, like `feat: add product search (#12)`, and rejects AI attribution.
 5. **Push.** `pre-push` runs the project's `check` command and refuses a direct push to the default branch. If `check` fails, the push doesn't happen.
-6. **Finish.** Say "land this", or just "this is done, merge it". `land` checks the acceptance criteria, runs `verify`, asks for an independent review of a larger change and a screen check if screens changed, opens the pull request, squash-merges it once green, and updates your default branch. It asks first only for a change you haven't approved that alters what people see or do, money rules or permissions.
+6. **Finish.** Say "land this", or just "this is done, merge it". `land` checks the acceptance criteria, runs `verify`, asks for an independent review of a larger change and a screen check if screens changed, opens the pull request, squash-merges it once green, updates your default branch, and tags the version if this change raised it. It asks first only for a change you haven't approved that alters what people see or do, money rules or permissions.
 
 At the end, Claude says what landed and what was verified.
 
@@ -57,7 +57,7 @@ At the end, Claude says what landed and what was verified.
 |---|---|
 | `/dev-workflow:setup` | Once per project, and again after updating the plugin |
 | `/dev-workflow:maintain` | The session-start line says maintenance is overdue. It never runs on a schedule |
-| `/dev-workflow:enable-releases` | You want release-please set up in a GitHub repo |
+| `/dev-workflow:enable-releases` | You want GitHub Releases, made by release-please, in a GitHub repo |
 
 You can call any skill by name, such as `/dev-workflow:land`, at any time. You don't have to. Say what you want in plain words, such as "check the screens I changed" or "get an outside review of this pull request", and the right skill comes in. Claude says "Using screen-check to ..." when one does.
 
@@ -75,14 +75,14 @@ Nine skills. Seven come in on their own when their trigger comes up. Two start o
 | `/dev-workflow:conventions-ui` | Applies the design system, copy, theme, accessibility and touch rules | You build, change or word a screen, form, label or message |
 | `/dev-workflow:screen-check` | Checks every touched screen in a browser and fixes what it finds | Anything people see has changed |
 | `/dev-workflow:independent-review` | Gets a review by another model, with a narrow brief, and checks each finding against the code | A pull request is larger than `review_threshold_lines`, or you ask for an outside review |
-| `/dev-workflow:land` | Confirms the issue is met, runs `verify` and the reviews needed, opens the pull request, squash-merges it when green and updates the default branch | Work on a branch is finished and ready to merge |
+| `/dev-workflow:land` | Confirms the issue is met, runs `verify` and the reviews needed, opens the pull request, squash-merges it when green, updates the default branch and tags the version if the merge raised it | Work on a branch is finished and ready to merge |
 
 **Only when you type it:**
 
 | Skill | What it does | When to type it |
 |---|---|---|
 | `/dev-workflow:maintain` | Sweeps branches, dead code, dependencies, code smells, docs and the setup, and records the run in `docs/maintenance.md` | Maintenance is due |
-| `/dev-workflow:enable-releases` | Sets up release-please in a GitHub repo | You want releases set up |
+| `/dev-workflow:enable-releases` | Adds GitHub Releases on top of version tags, through release-please, in a GitHub repo | You want GitHub Releases |
 
 Superpowers skills come in alongside these: `brainstorming` shapes a new idea, `test-driven-development` writes the test first, and `systematic-debugging` handles a failure.
 
@@ -98,7 +98,7 @@ Two layers check the rules. Both do nothing in a repo that hasn't run `/dev-work
 |---|---|---|
 | `commit-msg` | Every commit | Conventional Commit format. The issue number in the subject, on a `<type>/<issue>-<slug>` branch. No AI attribution, along with the project's attribution settings |
 | `pre-commit` | Every commit | Staged files are formatted. No workflow gains a per-pull-request trigger |
-| `pre-push` | Every push | Checks pass: it runs the project's `check` command. No direct push to the default branch |
+| `pre-push` | Every push | Checks pass: it runs the project's `check` command. No direct push to the default branch. A tag on a commit already in the default branch goes through without the check, since that commit was checked before it merged |
 
 **Claude Code hooks** come with the plugin. They apply only to Claude's own commands and edits.
 
@@ -165,6 +165,12 @@ The first and third are commands inside Claude Code. The second runs in your ter
 
 ### Upgrade notes
 
+- 1.2.0: a version and a GitHub Release are now separate things. Every version of a project is a git tag holding the bare version, like `1.4.0`, never `v1.4.0`.
+  - Without release-please, you raise the version in a pull request, in the project's version file: `package.json`, `pyproject.toml`, `Cargo.toml` or `VERSION` at the root. After the merge, `/dev-workflow:land` tags the commit that set that version and pushes the tag. Most merges don't change the version, so nothing is tagged then.
+  - With release-please, `/dev-workflow:enable-releases` now writes a config that makes bare tags, and `land` doesn't tag. release-please works only with GitHub.
+  - `pre-push` lets a tag through without running the check when its commit is already in the default branch. Other tags keep the old rule.
+  - To upgrade: run the usual update steps above, then run `/dev-workflow:setup` in each project and answer the new question about the version file. Setup brings the new rules in too.
+  - A project already on release-please with `v` tags keeps them: existing configs aren't changed. To switch to bare tags, set `include-v-in-tag` and `include-component-in-tag` to `false` in the config yourself. Don't mix the two formats: release-please looks for the last release by its tag, and mixed tags confuse that search.
 - 1.1.0: the model defaults changed. The Claude ones now follow the latest model in each family, and the GPT ones are 6.2 Sol and Astra. Settings you saved are kept. Run the usual update steps above.
 
 For people coming from 0.x or from `web-dev-workflow`:

@@ -21,6 +21,7 @@
   "testCommands": ["npm test"],
   "databaseResetCommands": ["npm run db:reset"],
   "ciAllowlist": [".github/workflows/release-check.yml"],
+  "versionFile": "package.json",
   "approvals": {
     "githubSettings": false,
     "mergePermission": false,
@@ -38,7 +39,7 @@
 |---|---|
 | `stack` | The stack files that apply, by name, as `detect.sh` suggests in `stackHints` and the person confirms. `[]` when none applies. Each stack's database reset commands are added for you. |
 | `hasScreens` | Whether people use screens in it. Turns on the screen rules and the plugins for screens. |
-| `defaultBranch` | The branch pushes are kept off. `detect.sh` reads it from the remote. Without a remote it gives the current branch, so confirm it. Missing means `main`. |
+| `defaultBranch` | The branch pushes are kept off. `detect.sh` reads it from `origin/HEAD`, which `git remote set-head origin --auto` brings up to date first. Without a remote it gives the current branch, so confirm it. Missing means `main`. |
 | `commands.check` | Required: the fast checks `pre-push` runs. A project without one gets a visible failure, never a silent pass. |
 | `commands.verify` | `check` plus the slower tests, before a release. |
 | `commands.formatCheckStaged` | The formatting checks `pre-commit` runs on staged files, one rule per glob. Each must only check, never rewrite: no `--write`, `-w` or `--fix`. No brace globs: one rule each for `*.ts` and `*.tsx`. |
@@ -46,6 +47,7 @@
 | `testCommands` | Commands that run the project's tests. |
 | `databaseResetCommands` | Commands that wipe a database, which the hooks hold for a person's yes. Only the project's own: the stack's come with it. |
 | `ciAllowlist` | Workflows allowed per-PR triggers. `project-file.sh existing-ci <root>` lists the ones that have them now, to offer. |
+| `versionFile` | The file that holds the version, by path from the root, as `detect.sh` suggests in `versionFiles`. After a merge, `land` tags the commit that set each version with the bare version, like `1.4.0`: a `.json` file's `version`, a `.toml` file's in `[project]`, `[package]`, `[tool.poetry]` or `[workspace.package]`, or any other file's first line. Leave it out when release-please tags versions, or when the project has none. |
 
 `schemaVersion`, `pluginVersion` and `managed` are setup's to set, and answers holding them are refused.
 
