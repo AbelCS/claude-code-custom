@@ -104,8 +104,11 @@ find_git_folder() {
 # in, as pre-push uses, else what origin says, else main.
 find_default_branch() {
   default_branch=
+  # Read whole, so a file that breaks part way gives nothing rather than what came first.
   if [ -f "$git_root/.claude/dev-workflow.json" ]; then
-    default_branch=$(jq -r '.defaultBranch // empty | strings' "$git_root/.claude/dev-workflow.json" 2>/dev/null)
+    default_branch=$(jq -rs 'if length == 1 and (.[0] | type) == "object" then .[0].defaultBranch // empty | strings else empty end' \
+      "$git_root/.claude/dev-workflow.json" 2>/dev/null) || default_branch=
+    git check-ref-format --branch "$default_branch" >/dev/null 2>&1 || default_branch=
   fi
   [ -z "$default_branch" ] || return 0
   default_branch=$(git -C "$git_path" symbolic-ref --quiet refs/remotes/origin/HEAD 2>/dev/null)

@@ -2,7 +2,7 @@
 name: maintain
 description: Run by a person when maintenance is due, or the session start says it's overdue. Sweeps merged branches, dead code, dependencies, code smells, docs and the methodology's setup, lands each area's fixes through its own issue and pull request, and records the run in docs/maintenance.md.
 disable-model-invocation: true
-allowed-tools: Read Glob Grep Bash(sh ${CLAUDE_PLUGIN_ROOT}/scripts/maintain/merged-branches.sh *) Bash(sh ${CLAUDE_PLUGIN_ROOT}/scripts/setup/detect.sh *) Bash(sh ${CLAUDE_PLUGIN_ROOT}/scripts/setup/tools.sh *) Bash(sh ${CLAUDE_PLUGIN_ROOT}/scripts/setup/run.sh * --plan *) Bash(git status *) Bash(git log *) Bash(git worktree list *)
+allowed-tools: Read Glob Grep Bash(sh ${CLAUDE_PLUGIN_ROOT}/scripts/maintain/merged-branches.sh *) Bash(sh ${CLAUDE_PLUGIN_ROOT}/scripts/maintain/newer-models.sh *) Bash(sh ${CLAUDE_PLUGIN_ROOT}/scripts/setup/detect.sh *) Bash(sh ${CLAUDE_PLUGIN_ROOT}/scripts/setup/tools.sh *) Bash(sh ${CLAUDE_PLUGIN_ROOT}/scripts/setup/run.sh * --plan *) Bash(git status *) Bash(git log *) Bash(git worktree list *)
 ---
 
 # Maintain
@@ -70,9 +70,9 @@ If it shows only `keep`, the setup is current. Otherwise run `/dev-workflow:setu
 Then report when a newer reviewer or second-opinion model is available, with the same code the session-start check uses:
 
 ```sh
-sh "${CLAUDE_PLUGIN_ROOT}/scripts/maintain/newer-models.sh" <<'SETTINGS'
-${user_config.reviewer_command}
+sh ${CLAUDE_PLUGIN_ROOT}/scripts/maintain/newer-models.sh <<'SETTINGS'
 ${user_config.model_noncoding_alt}
+${user_config.reviewer_command}
 SETTINGS
 ```
 

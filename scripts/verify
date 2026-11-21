@@ -15,8 +15,10 @@ failed=0
 skipped=0
 for test_file in "$root"/tests/verify_only/*.test.sh; do
   [ -f "$test_file" ] || continue
-  sh "$test_file" </dev/null
-  case $? in
+  # Kept apart from the shell's own exit on failure, as under sh -e.
+  status=0
+  sh "$test_file" </dev/null || status=$?
+  case $status in
     0)
       passed=$((passed + 1))
       echo "ok      $test_file"

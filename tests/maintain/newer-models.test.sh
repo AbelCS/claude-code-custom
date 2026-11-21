@@ -19,8 +19,9 @@ codex_home() { # <slug...>: a Codex folder whose model cache lists these.
   printf '%s\n' "$ch_dir"
 }
 
-run() { # <reviewer line> <alt line>
-  printf '%s\n%s\n' "$1" "$2" | sh "$NM"
+run() { # <reviewer command> <alt model>: in the skill's order, the model first, as the
+  # command can run over more than one line.
+  printf '%s\n%s\n' "$2" "$1" | sh "$NM"
 }
 
 CODEX_HOME=$(codex_home gpt-6.9-sol gpt-6.10-sol gpt-6.2-astra gpt-6.3-astra)
@@ -31,6 +32,12 @@ out=$(run 'codex exec -m gpt-6.9-sol --sandbox read-only "<brief>" < /dev/null' 
 assert_contains "$out" 'gpt-6.10-sol is available; the reviewer uses gpt-6.9-sol. Change reviewer_command and reviewer_name in /config.'
 assert_contains "$out" 'gpt-6.3-astra is available; the second-opinion model uses gpt-6.2-astra. Change model_noncoding_alt in /config.'
 assert_exit 0 test "$(printf '%s\n' "$out" | wc -l | tr -d ' ')" = 2
+
+# A command over two lines, with a continuation, is still one setting.
+out=$(run 'codex exec \
+  -m gpt-6.9-sol --sandbox read-only' gpt-6.2-astra)
+assert_contains "$out" 'gpt-6.10-sol is available; the reviewer uses gpt-6.9-sol.'
+assert_contains "$out" 'the second-opinion model uses gpt-6.2-astra.'
 
 # Unsaved settings reach the skill as placeholders, or nothing: the defaults count then.
 # shellcheck disable=SC2016 # The placeholders are literal.
