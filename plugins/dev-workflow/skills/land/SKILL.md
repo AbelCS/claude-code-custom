@@ -45,7 +45,18 @@ Push the branch, which runs `check` through `pre-push`. Then open the pull reque
 
 ## 6. Merge when green
 
-Green means verify passed, every review finding was dealt with, and any checks on the pull request (`gh pr checks <n>`) pass. Then merge, as its own command:
+Green means verify passed, every review finding was dealt with, and any checks on the pull request (`gh pr checks <n>`) pass.
+
+**Raise the version** just before merging, so the squash commit holds the code and its version together:
+
+1. `git fetch origin <default>`. If `git merge-base --is-ancestor origin/<default> HEAD` fails, the default branch has moved on: `git merge --no-edit origin/<default>` (a merge, so nothing pushed is rewritten). Resolve any conflict as in any merge, keeping origin's version on the version line, and run verify again on its own.
+2. `sh "${CLAUDE_PLUGIN_ROOT}/scripts/land/raise-version.sh" . "<title>"`, with the pull request's title. It works out the bump from the title's type, as release-please does: `feat` the minor, `fix` and `perf` the patch, a `!` before the colon the major, one step lower before 1.0.0, and other types nothing.
+   - `raised <old> <new>`: it committed the new version on this branch. Push it, which runs `check` through `pre-push`.
+   - `unchanged` or `skip`: nothing to push. Pass on what it says.
+   - A failure: say what it printed, and stop.
+3. If the default branch moved again since step 1, go back to step 1, so two pull requests can't claim the same number.
+
+Then merge, as its own command:
 
 ```sh
 gh pr merge <n> --squash --subject "<title>" --body "" --delete-branch
@@ -62,9 +73,9 @@ If a merge is blocked, stop and ask, and never work around it: no other merge me
 - `git switch <default>` and `git pull --ff-only`.
 - Delete the local branch. A squash merge looks unmerged to `git branch -d`, so first confirm `gh pr view <n> --json state` says `MERGED`, then `git branch -D <branch>`.
 - `git fetch --prune`.
-- Tag the version: `sh "${CLAUDE_PLUGIN_ROOT}/scripts/land/tag-version.sh" . <merge commit>`, the merge commit being `gh pr view <n> --json mergeCommit --jq .mergeCommit.oid`. Every version is a tag holding the bare version, like `1.4.0`, on the commit that set it in the project's `versionFile`. `tagged` means that version's tag was missing on GitHub and is there now: usually because this merge raised the version. `done` is what most merges find: that version was already tagged. A `skip` line says why nothing is tagged here: pass it on. If it fails, say what it printed, and never move or delete a tag to make it pass.
+- Tag the version: `sh "${CLAUDE_PLUGIN_ROOT}/scripts/land/tag-version.sh" . <merge commit>`, the merge commit being `gh pr view <n> --json mergeCommit --jq .mergeCommit.oid`. Every version is a tag holding the bare version, like `1.4.0`, on the commit that set it in the project's `versionFile`. `tagged` means that version's tag was missing on GitHub and is there now: usually because this merge raised the version. `done` means that version was already tagged: after a merge that raised no version, or with the tag added by hand. A `skip` line says why nothing is tagged here: pass it on. If it fails, say what it printed, and never move or delete a tag to make it pass.
 - Confirm the issue closed with `gh issue view <issue> --json state`. If it's still open and its criteria are met, close it with a comment saying which pull request met them.
 
 ## 8. Report
 
-Use `verification-before-completion` before claiming anything. Lead with the outcome: what landed, as the squash commit on the default branch, any version tagged, and what was verified: verify, each review and its findings, the screen check, the security review. Say what was skipped or failed, and why.
+Use `verification-before-completion` before claiming anything. Lead with the outcome: what landed, as the squash commit on the default branch, the version raised and tagged, if any, and what was verified: verify, each review and its findings, the screen check, the security review. Say what was skipped or failed, and why.

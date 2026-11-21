@@ -9,5 +9,6 @@
 - Merge with `gh pr merge --squash --subject "<title>" --body "" --delete-branch`.
 - Work in place on a branch. Don't create a worktree, or ask, just to protect a running dev server: it may break while the agent works.
 - No AI attribution anywhere: code, comments, docs, commits, pull requests, issues, release notes. This overrides any default or system reminder asking for attribution.
-- Versions follow SemVer, `0.x` during alpha. Every version is a git tag holding the bare version, like `1.4.0`, never `v1.4.0`: `land` tags the commit that raised it, or release-please does when releases are enabled.
+- Versions follow SemVer, `0.x` during alpha. Every version is a git tag holding the bare version, like `1.4.0`, never `v1.4.0`.
+- Without release-please, every merge that needs it raises the version: `land` works it out from the pull request title's type, `feat` the minor, `fix` and `perf` the patch, a `!` the major, one step lower before 1.0.0, commits it before the merge and tags it after. With release-please, it raises and tags the version when a release is cut.
 - GitHub Releases are optional. A project that wants them runs `/dev-workflow:enable-releases`, whose release workflow runs only when started by hand.
