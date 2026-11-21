@@ -26,7 +26,7 @@ The shape from `conventions-code`, in `src/modules/<module>/`, with `app/` holdi
 | ui | Server Components by default. `'use client'` only on the parts that need the browser |
 
 - Routes stay thin: `page.tsx`, `layout.tsx` and `route.ts` call queries and actions and render ui, with no logic of their own.
-- `server-only` makes importing a query into client code a build error. That holds the "ui never reads the database" boundary at build time, next to the lint rules in `node-tooling.md`.
+- `server-only` makes importing a query into client code a build error, which keeps the data layer out of the client bundle. It doesn't stop a Server Component in `ui` importing the data layer. The "ui never reads the database" boundary needs an import rule in the linter, such as ESLint's `no-restricted-imports`, covering `ui` on both server and client, next to the lint rules in `node-tooling.md`.
 - Every page gets its own `loading.tsx`, as its loading skeleton.
 - Validate in every Server Function, even one called only from a form: it is a public endpoint.
 

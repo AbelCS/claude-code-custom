@@ -21,7 +21,7 @@ Tools needed: `git`, `gh`, `jq`, `uvx` and `claude` (Claude Code 2.1.295 or late
 | Command | What it does |
 |---|---|
 | `scripts/check` | Script tests, plugin validation and shell lint. `pre-push` runs it. |
-| `scripts/verify` | `check`, then the slower tests in `tests/verify_only/`: the leak search, live hook tests that spend a few cents on real sessions, install tests in a throwaway Claude Code config that spend nothing, and setup run end to end on the apps in `tests/fixtures/`, with their database tests in Docker. `DW_SKIP_LIVE=1` and `DW_SKIP_FIXTURES=1` skip those two, visibly. |
+| `scripts/verify` | `check`, then the slower tests in `tests/verify_only/`: the leak search, live hook tests that spend a few cents on real sessions, install tests in a throwaway Claude Code config that spend nothing, and setup run end to end on the apps in `tests/fixtures/`, with their database tests in Docker. `DW_SKIP_LIVE=1` and `DW_SKIP_FIXTURES=1` skip those two, visibly. A skipped suite exits 77, and `verify` counts it as skipped, not passed. |
 | `sh tests/<name>.test.sh` | One test. |
 | `claude plugin eval plugins/dev-workflow --ablation none --max-cost-usd 4` | The skill evals in `plugins/dev-workflow/evals/`: does each skill come in on natural phrasing and stay out otherwise. Real sessions, about $3. Results go to its git-ignored `results/`. |
 
@@ -87,7 +87,7 @@ Tools needed: `git`, `gh`, `jq`, `uvx` and `claude` (Claude Code 2.1.295 or late
 
 - Test first: every feature, bug fix, refactor and behaviour change.
 - `tests/run.sh` runs test files all at once, so each one uses only its own temp folders.
-- Tests run locally through git hooks. `pre-commit` checks the formatting of staged files when formatters are configured, and blocks a workflow that gains a per-PR trigger. `commit-msg` checks the format, requires the issue number on a `<type>/<issue>-<slug>` branch and rejects attribution. `pre-push` blocks direct pushes to `main`, except a new repo's first push, and runs `scripts/check`. That runs on the checkout, so `pre-push` fails if a pushed ref isn't what's checked out, except notes, which hold no code and need no check, and warns if the work tree has uncommitted changes.
+- Tests run locally through git hooks. `pre-commit` checks the formatting of staged files when formatters are configured, and blocks a workflow that gains a per-PR trigger. `commit-msg` checks the format, requires the issue number on a `<type>/<issue>-<slug>` branch and rejects attribution. `pre-push` blocks direct pushes to `main`, except a new repo's first push, when the remote has no branches, and runs `scripts/check`. A blank `check` counts as no check and fails. That runs on the checkout, so `pre-push` fails if a pushed ref isn't what's checked out. It lets out deletions, notes, which hold no code, and a tag whose commit is already in the remote's default branch, since that commit was checked before it merged. It warns if the work tree has uncommitted changes.
 - CI runs only for releases. Never add per-PR pipelines.
 - A flaky test is a bug until proven otherwise: find the root cause before rerunning or retrying. Only rerun for a proven environmental cause, such as the laptop sleeping, and say so.
 

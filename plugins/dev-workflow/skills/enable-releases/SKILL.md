@@ -54,7 +54,7 @@ Read the release notes when the major version is newer than the templates' examp
 One question at a time, recommendation first:
 
 1. **The default branch,** from `defaultBranch` in `.claude/dev-workflow.json`, or `gh repo view --json defaultBranchRef`. Confirm it only if neither gives one.
-2. **The optional release check:** a workflow running the project's `check` command on release-please's pull requests, and no others. Recommend leaving it out: a release pull request changes only the changelog and versions, and pull requests opened with the default `GITHUB_TOKEN` don't start other workflows, so it would never run without a token of its own. Add it only with that token: a fine-grained token or a GitHub App's, saved as a repo secret such as `RELEASE_PLEASE_TOKEN`.
+2. **The optional release check:** a workflow running the project's `check` command on release-please's pull requests, and no others. Recommend leaving it out: a release pull request changes only the changelog and versions, and with the default `GITHUB_TOKEN` its runs wait for someone with write access to approve them on each release pull request, where a token of its own lets them run unattended. Add it only with that token: a fine-grained token or a GitHub App's, saved as a repo secret such as `RELEASE_PLEASE_TOKEN`.
 
 ## 6. Show the plan, then write
 
