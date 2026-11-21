@@ -127,6 +127,19 @@ assert_exit 1 sh "$TV" "$repo" not-a-commit
 assert_exit 1 test -n "$(git -C "$repo" tag -l 9.0.0)"
 git -C "$repo" switch -q main
 
+# The project file and release-please's config are read as they were in that merge, not
+# as a later merge left them.
+new_fixture VERSION
+commit_file VERSION 1.0.0 >/dev/null
+merge_a=$(commit_file VERSION 1.1.0)
+commit_file NEWVERSION 5.0.0 >/dev/null
+jq '.versionFile = "NEWVERSION"' "$repo/.claude/dev-workflow.json" >"$base/pf.json"
+commit_file .claude/dev-workflow.json "$(cat "$base/pf.json")" >/dev/null
+commit_file release-please-config.json '{}' >/dev/null
+publish
+assert_contains "$(sh "$TV" "$repo" "$merge_a")" "tagged 1.1.0 $merge_a"
+assert_contains "$(run)" 'skip release-please'
+
 # --- A history with merge commits: the default branch's own line, not a side branch's
 
 new_fixture VERSION

@@ -39,7 +39,7 @@
 |---|---|
 | `stack` | The stack files that apply, by name, as `detect.sh` suggests in `stackHints` and the person confirms. `[]` when none applies. Each stack's database reset commands are added for you. |
 | `hasScreens` | Whether people use screens in it. Turns on the screen rules and the plugins for screens. |
-| `defaultBranch` | The branch pushes are kept off. `detect.sh` reads it from the remote. Without a remote it gives the current branch, so confirm it. Missing means `main`. |
+| `defaultBranch` | The branch pushes are kept off. `detect.sh` reads it from `origin/HEAD`, which `git remote set-head origin --auto` brings up to date first. Without a remote it gives the current branch, so confirm it. Missing means `main`. |
 | `commands.check` | Required: the fast checks `pre-push` runs. A project without one gets a visible failure, never a silent pass. |
 | `commands.verify` | `check` plus the slower tests, before a release. |
 | `commands.formatCheckStaged` | The formatting checks `pre-commit` runs on staged files, one rule per glob. Each must only check, never rewrite: no `--write`, `-w` or `--fix`. No brace globs: one rule each for `*.ts` and `*.tsx`. |

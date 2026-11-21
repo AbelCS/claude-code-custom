@@ -2,25 +2,26 @@
 # Usage: tag-version.sh <root> [<commit>]
 #
 # Tags the project's version as of <commit>, the merge land just made, or as of origin's
-# default branch without one, for land after a merge. Every version is a git
-# tag holding the bare version, like 1.4.0. Prints one line:
-#   tagged <version> <commit>   created the tag on that commit, and pushed it
+# default branch without one. Every version is a git tag holding the bare version, like
+# 1.4.0. Prints one line:
+#   tagged <version> <commit>   the tag was missing on origin: created and pushed
 #   done <version> <commit>     the tag was already there, which is what most merges find
 #   skip release-please: ...    release-please tags versions in this project
 #   skip no-version-file: ...   the project file names no versionFile
 #
-# The version is read from versionFile, a path from the root in .claude/dev-workflow.json,
-# as committed in <commit>, which has to be on origin's default branch, fetched first: a
-# .json file's "version" field, a .toml file's version in [project], [package],
-# [tool.poetry] or [workspace.package], and any other file's first line. It must be a bare SemVer version,
-# such as 1.4.0 or 2.0.0-rc.1, with no v.
+# <commit> has to be on origin's default branch, which is fetched first. Its own project
+# file names versionFile, a path from the root, and its own tree says whether
+# release-please is set up: a later merge may have changed either. The version is read
+# from that file as committed there: a .json file's "version" field, a .toml file's
+# version in [project], [package], [tool.poetry] or [workspace.package], and any other
+# file's first line. It must follow SemVer 2.0.0's grammar, with no v, such as 1.4.0 or
+# 2.0.0-rc.1, and be a name git allows for a tag.
 #
 # The tag goes on the commit that set that version: walking back along the default
 # branch's own line, first parents only, through the commits that touched the file, the
 # oldest one in the run still holding it. So it doesn't matter how many merges came
 # after. A shallow clone can't show that, so it stops, and so does a project file whose
-# defaultBranch isn't origin's. The version follows SemVer 2.0.0's grammar, and has to be
-# a name git allows for a tag. A tag already there, locally or on origin, is never
+# defaultBranch isn't origin's. A tag already there, locally or on origin, is never
 # moved: on another commit, it's reported.
 #
 # Exits 1 when the version can't be tagged, saying why, and 2 on bad usage or a folder
@@ -47,17 +48,7 @@ root=$1
 project=$root/.claude/dev-workflow.json
 [ -f "$project" ] || die "no project file at $project: run the setup skill first"
 
-if [ -e "$root/release-please-config.json" ]; then
-  echo 'skip release-please: its second run tags each release'
-  exit 0
-fi
-
-file=$(jq -r '.versionFile // empty' "$project") || die "cannot read $project"
 default=$(jq -r '.defaultBranch // "main"' "$project") || die "cannot read $project"
-if [ -z "$file" ]; then
-  echo 'skip no-version-file: versions aren'"'"'t tagged here until setup records versionFile, the file that holds the version'
-  exit 0
-fi
 
 g() {
   git -C "$root" "$@"
@@ -75,7 +66,7 @@ fetch() {
 head=$(g ls-remote --symref origin HEAD) || fail "could not read origin's default branch"
 head=$(printf '%s\n' "$head" | awk '$1 == "ref:" && $3 == "HEAD" && sub(/^refs\/heads\//, "", $2) { print $2 }')
 if [ -n "$head" ] && [ "$head" != "$default" ]; then
-  fail "origin's default branch is $head, but the project file says $default: run the setup skill to update it, then try again"
+  fail "origin's default branch is $head, but the project file says $default: run git remote set-head origin --auto and the setup skill to update it, then try again"
 fi
 fetch "+refs/heads/$default:refs/remotes/origin/$default" ||
   fail "could not fetch $default from origin"
@@ -86,6 +77,17 @@ if [ "$#" -eq 2 ]; then
   g merge-base --is-ancestor "$start" "$tip" || fail "$2 isn't on origin/$default, so it isn't a merge to tag"
 else
   start=$tip
+fi
+
+# The settings as they were in that commit: a later merge may have changed them.
+if g cat-file -e "$start:release-please-config.json" 2>/dev/null; then
+  echo 'skip release-please: its second run tags each release'
+  exit 0
+fi
+file=$(g show "$start:.claude/dev-workflow.json" 2>/dev/null | jq -r '.versionFile // empty' 2>/dev/null)
+if [ -z "$file" ]; then
+  echo 'skip no-version-file: versions aren'"'"'t tagged here until setup records versionFile, the file that holds the version'
+  exit 0
 fi
 
 # version_at <commit>: prints the version the file holds there, or nothing.

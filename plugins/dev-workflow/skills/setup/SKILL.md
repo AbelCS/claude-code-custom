@@ -12,7 +12,7 @@ Say "Using setup to ..." first. The scripts in `${CLAUDE_PLUGIN_ROOT}/scripts/se
 
 ## 1. Detect
 
-Run `sh ${CLAUDE_PLUGIN_ROOT}/scripts/setup/detect.sh .` from the repo. It prints JSON: whether the repo is empty, its remote and default branch, stack hints and other languages, any hook tool already there (husky, lefthook, pre-commit, simple-git-hooks), the hooks path git uses and where it's set (`hooksPath`, `hooksPathScope`), the executable hooks in `.git/hooks` (`gitHooks`), the state of `AGENTS.md` and `CLAUDE.md`, the old rule blocks found in them, whether there's a project file, and the files at the root that can hold a version (`versionFiles`).
+If the repo has an `origin`, first run `git remote set-head origin --auto`, so the default branch detection reads is origin's current one, not a copy from when it was cloned. Then run `sh ${CLAUDE_PLUGIN_ROOT}/scripts/setup/detect.sh .` from the repo. It prints JSON: whether the repo is empty, its remote and default branch, stack hints and other languages, any hook tool already there (husky, lefthook, pre-commit, simple-git-hooks), the hooks path git uses and where it's set (`hooksPath`, `hooksPathScope`), the executable hooks in `.git/hooks` (`gitHooks`), the state of `AGENTS.md` and `CLAUDE.md`, the old rule blocks found in them, whether there's a project file, and the files at the root that can hold a version (`versionFiles`).
 
 Read what you need to answer the questions yourself: `package.json` scripts, `pyproject.toml`, a `Makefile`, the CI workflows, an existing `.claude/dev-workflow.json`. An answer you can read is one you don't have to ask.
 
