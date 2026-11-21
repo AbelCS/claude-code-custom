@@ -572,8 +572,13 @@ pushes 0.9.0 0.9.1
 check_did_not_run
 
 # A merged tag doesn't let anything else out unchecked: a branch with it still runs it.
-pushes 'feat/2-y' 1.0.0
+# Both are new to the remote, as git leaves out refs that are already up to date.
+git -C "$repo" tag 1.2.0 main
+forget_runs
+pushes 'feat/2-y' 1.2.0
 check_ran
+assert_exit 0 test "$(remote_sha refs/tags/1.2.0)" = "$(sha_of 1.2.0)"
+assert_exit 0 test "$(remote_sha refs/heads/feat/2-y)" = "$(sha_of feat/2-y)"
 
 # A tag on a commit that isn't merged keeps the rule: it must be what's checked out.
 git -C "$repo" tag 2.0.0-rc.1 'HEAD~1'

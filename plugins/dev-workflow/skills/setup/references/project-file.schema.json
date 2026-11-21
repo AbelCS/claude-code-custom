@@ -123,6 +123,10 @@
         {
           "not": { "pattern": "(^|/)\\.\\.(/|$)" },
           "x-error": "has to stay inside the repo: no .. in the path"
+        },
+        {
+          "not": { "pattern": "(^|/)\\.(/|$)|//" },
+          "x-error": "has to be written plainly, without ./ or //, such as plugins/app/package.json"
         }
       ]
     },

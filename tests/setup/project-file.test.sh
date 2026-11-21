@@ -63,7 +63,7 @@ assert_exit 2 sh "$PF" validate "$work/missing.json"
 # versionFile: a file's path from the repo's root, which can't lead out of it.
 printf '%s\n' '{"schemaVersion": 1, "pluginVersion": "1.0.0", "commands": {"check": "x"}, "versionFile": "plugins/app/.claude-plugin/plugin.json"}' >"$work/version.json"
 assert_exit 0 sh "$PF" validate "$work/version.json"
-for bad in '""' '"/etc/version"' '"../VERSION"' '"a/../../VERSION"' '"dir/"' '1'; do
+for bad in '""' '"/etc/version"' '"../VERSION"' '"a/../../VERSION"' '"dir/"' '"dir/./VERSION"' '"./VERSION"' '"a//b"' '1'; do
   invalid '{"schemaVersion": 1, "pluginVersion": "1.0.0", "commands": {"check": "x"}, "versionFile": '"$bad"'}' "versionFile"
 done
 

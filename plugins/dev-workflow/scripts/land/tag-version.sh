@@ -1,7 +1,8 @@
 #!/bin/sh
-# Usage: tag-version.sh <root>
+# Usage: tag-version.sh <root> [<commit>]
 #
-# Tags the project's current version, for land after a merge. Every version is a git
+# Tags the project's version as of <commit>, the merge land just made, or as of origin's
+# default branch without one, for land after a merge. Every version is a git
 # tag holding the bare version, like 1.4.0. Prints one line:
 #   tagged <version> <commit>   created the tag on that commit, and pushed it
 #   done <version> <commit>     the tag was already there, which is what most merges find
@@ -9,14 +10,15 @@
 #   skip no-version-file: ...   the project file names no versionFile
 #
 # The version is read from versionFile, a path from the root in .claude/dev-workflow.json,
-# as committed on origin's default branch, which it fetches first: a .json file's
-# "version" field, a .toml file's version in [project], [package], [tool.poetry] or
-# [workspace.package], and any other file's first line. It must be a bare SemVer version,
+# as committed in <commit>, which has to be on origin's default branch, fetched first: a
+# .json file's "version" field, a .toml file's version in [project], [package],
+# [tool.poetry] or [workspace.package], and any other file's first line. It must be a bare SemVer version,
 # such as 1.4.0 or 2.0.0-rc.1, with no v.
 #
-# The tag goes on the commit that set that version: walking back through the commits
-# that touched the file, the oldest one in the run still holding it. So it doesn't
-# matter how many merges came after. A tag already there, locally or on origin, is never
+# The tag goes on the commit that set that version: walking back along the default
+# branch's own line, first parents only, through the commits that touched the file, the
+# oldest one in the run still holding it. So it doesn't matter how many merges came
+# after. A shallow clone can't show that, so it stops. A tag already there, locally or on origin, is never
 # moved: on another commit, it's reported.
 #
 # Exits 1 when the version can't be tagged, saying why, and 2 on bad usage or a folder
@@ -32,7 +34,7 @@ fail() {
   exit 1
 }
 
-[ "$#" -eq 1 ] || die "usage: tag-version.sh <root>"
+[ "$#" -eq 1 ] || [ "$#" -eq 2 ] || die "usage: tag-version.sh <root> [<commit>]"
 for tool in git jq; do
   command -v "$tool" >/dev/null 2>&1 || die "missing required tool: $tool"
 done
@@ -59,10 +61,24 @@ g() {
   git -C "$root" "$@"
 }
 
-g fetch -q origin "+refs/heads/$default:refs/remotes/origin/$default" ||
+# Only the refs named: no other tags, and no pruning, which could remove a local tag
+# before it's checked.
+fetch() {
+  g -c fetch.prune=false -c fetch.pruneTags=false fetch -q --no-tags origin "$@"
+}
+
+[ "$(g rev-parse --is-shallow-repository)" = false ] ||
+  fail "this is a shallow clone, which can't show the commit that set the version: run git fetch --unshallow, then try again"
+fetch "+refs/heads/$default:refs/remotes/origin/$default" ||
   fail "could not fetch $default from origin"
 tip=$(g rev-parse -q --verify "refs/remotes/origin/$default^{commit}") ||
   fail "origin has no $default branch"
+if [ "$#" -eq 2 ]; then
+  start=$(g rev-parse -q --verify "$2^{commit}") || fail "not a commit: $2"
+  g merge-base --is-ancestor "$start" "$tip" || fail "$2 isn't on origin/$default, so it isn't a merge to tag"
+else
+  start=$tip
+fi
 
 # version_at <commit>: prints the version the file holds there, or nothing.
 version_at() {
@@ -73,11 +89,12 @@ version_at() {
         jq -r 'if type == "object" and (.version | type) == "string" then .version else empty end' 2>/dev/null
       ;;
     *.toml)
-      printf '%s\n' "$content" | awk '
-        /^[[:space:]]*\[/ { table = $0; gsub(/[[:space:]]/, "", table); next }
+      printf '%s\n' "$content" | awk -v q="'" '
+        /^[[:space:]]*\[/ { table = $0; sub(/#.*/, "", table); gsub(/[[:space:]]/, "", table); next }
         (table == "[project]" || table == "[package]" || table == "[tool.poetry]" || table == "[workspace.package]") &&
-          /^[[:space:]]*version[[:space:]]*=[[:space:]]*"/ {
-          sub(/^[^=]*=[[:space:]]*"/, ""); sub(/".*$/, ""); print; exit
+          $0 ~ ("^[[:space:]]*version[[:space:]]*=[[:space:]]*[\"" q "]") {
+          sub(/^[^=]*=[[:space:]]*/, ""); quote = substr($0, 1, 1); $0 = substr($0, 2)
+          sub(quote ".*$", ""); print; exit
         }'
       ;;
     *)
@@ -86,8 +103,8 @@ version_at() {
   esac
 }
 
-g cat-file -e "$tip:$file" 2>/dev/null || fail "$file isn't on origin/$default"
-version=$(version_at "$tip")
+g cat-file -e "$start:$file" 2>/dev/null || fail "$file isn't on origin/$default"
+version=$(version_at "$start")
 if ! printf '%s\n' "$version" |
   grep -Eqx '(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?' ||
   ! git check-ref-format "refs/tags/$version"; then
@@ -95,7 +112,7 @@ if ! printf '%s\n' "$version" |
 fi
 
 target=
-for commit in $(g rev-list "$tip" -- "$file"); do
+for commit in $(g rev-list --first-parent "$start" -- ":(literal)$file"); do
   [ "$(version_at "$commit")" = "$version" ] || break
   target=$commit
 done
@@ -116,7 +133,7 @@ if [ -n "$remote" ]; then
     fail "origin's tag $version is on $remote, not on $target, which set $version in $file: it's left as it is, for a person to sort out"
   fi
   if [ -z "$local" ]; then
-    g fetch -q origin "refs/tags/$version:refs/tags/$version" || fail "could not fetch the tag $version"
+    fetch "refs/tags/$version:refs/tags/$version" || fail "could not fetch the tag $version"
   fi
   echo "done $version $target"
   exit 0

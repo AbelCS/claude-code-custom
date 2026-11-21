@@ -36,7 +36,7 @@ new_fixture() { # <version file, or "" for none>
 commit_file() { # <path> <contents>: commits it, and prints the commit.
   mkdir -p "$(dirname "$repo/$1")"
   printf '%s\n' "$2" >"$repo/$1"
-  git -C "$repo" add "$1"
+  git -C "$repo" add -- ":(literal)$1"
   git -C "$repo" commit -q -m "chore: change $1"
   git -C "$repo" rev-parse HEAD
 }
@@ -106,6 +106,70 @@ git -C "$repo" tag -d 1.1.0 >/dev/null
 assert_exit 1 run
 assert_exit 0 test "$(remote_tag 1.1.0)" = "$(git -C "$repo" rev-parse HEAD)"
 
+# --- Given the merge's own commit, it tags what that merge set, even after later ones
+
+new_fixture package.json
+commit_file package.json '{ "version": "1.0.0" }' >/dev/null
+first=$(commit_file package.json '{ "version": "1.1.0" }')
+second=$(commit_file package.json '{ "version": "1.2.0" }')
+publish
+assert_contains "$(sh "$TV" "$repo" "$first")" "tagged 1.1.0 $first"
+assert_contains "$(sh "$TV" "$repo" "$second")" "tagged 1.2.0 $second"
+# A merge that didn't change the version finds the one before it already tagged.
+empty_commit
+publish
+assert_contains "$(sh "$TV" "$repo" "$(git -C "$repo" rev-parse HEAD)")" "done 1.2.0 $second"
+# A commit that isn't on the remote's default branch isn't a merge.
+git -C "$repo" switch -q -c side
+side=$(commit_file package.json '{ "version": "9.0.0" }')
+assert_exit 1 sh "$TV" "$repo" "$side"
+assert_exit 1 sh "$TV" "$repo" not-a-commit
+assert_exit 1 test -n "$(git -C "$repo" tag -l 9.0.0)"
+git -C "$repo" switch -q main
+
+# --- A history with merge commits: the default branch's own line, not a side branch's
+
+new_fixture VERSION
+commit_file VERSION 1.0.0 >/dev/null
+git -C "$repo" switch -q -c side
+commit_file VERSION 1.1.0 >/dev/null
+commit_file other.txt x >/dev/null
+git -C "$repo" switch -q main
+empty_commit
+git -C "$repo" merge -q --no-ff -m 'Merge side' side
+merge=$(git -C "$repo" rev-parse HEAD)
+publish
+assert_contains "$(run)" "tagged 1.1.0 $merge"
+
+# --- A shallow clone can't show where the version was set, so it stops
+
+new_fixture VERSION
+commit_file VERSION 1.0.0 >/dev/null
+empty_commit
+publish
+shallow=$(tmp_dir)/shallow
+git clone -q --depth 1 "file://$origin" "$shallow"
+cp -R "$repo/.claude" "$shallow/"
+git -C "$shallow" config user.name Test
+git -C "$shallow" config user.email test@example.com
+assert_exit 1 sh "$TV" "$shallow"
+assert_contains "$(sh "$TV" "$shallow" 2>&1)" 'shallow'
+assert_exit 1 test -n "$(git -C "$origin" tag -l)"
+
+# --- Fetch settings that prune tags don't remove a local tag before it's checked
+
+new_fixture VERSION
+set_it=$(commit_file VERSION 1.0.0)
+empty_commit
+publish
+git -C "$repo" tag 1.0.0 HEAD
+git -C "$repo" config fetch.prune true
+git -C "$repo" config fetch.pruneTags true
+assert_exit 1 run
+assert_exit 0 test "$(git -C "$repo" rev-parse 'refs/tags/1.0.0^{commit}')" = "$(git -C "$repo" rev-parse HEAD)"
+assert_exit 1 test -n "$(remote_tag 1.0.0)"
+assert_exit 0 test -n "$set_it"
+
 # --- Only what's on the remote's default branch counts
 
 new_fixture package.json
@@ -141,6 +205,20 @@ version = "0.4.1"
 serde = { version = "1" }')
 publish
 assert_contains "$(run)" "tagged 0.4.1 $set_it"
+
+# A comment after the table's name, and single quotes, are TOML too.
+new_fixture pyproject.toml
+set_it=$(commit_file pyproject.toml "[project]  # the package
+name = 'app'
+version = '0.5.0'")
+publish
+assert_contains "$(run)" "tagged 0.5.0 $set_it"
+
+# A file name that git would otherwise read as a pattern.
+new_fixture ':VERSION'
+set_it=$(commit_file ':VERSION' 0.6.0)
+publish
+assert_contains "$(run)" "tagged 0.6.0 $set_it"
 
 # A plain file holding the version, in a subfolder.
 new_fixture plugins/app/VERSION
