@@ -2,6 +2,8 @@
 
 Issue: [#27](https://github.com/AbelCS/claude-code-custom/issues/27). Status: approved by the owner on 2026-11-21.
 
+> **Superseded in part.** The [raise-version spec](2026-11-21-raise-version-design.md) replaces decision 4 below, that a person raises the version by hand in a pull request, and the out-of-scope item about choosing the next version automatically: without release-please, `land` now raises it from the pull request title's type. The rest stands.
+
 ## Problem
 
 The rules said "Releases follow SemVer". That mixed up two things. A version is the SemVer number of the code. A GitHub Release is a GitHub feature. A project that never enabled releases had versions and nothing marking them: no tag said which commit was 1.1.0. This repo was one of them, with three versions out and no tags.
