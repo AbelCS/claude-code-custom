@@ -1,5 +1,6 @@
 #!/bin/sh
-# Everything: check, then the slower tests in tests/verify_only/.
+# Everything: check, then the slower tests in tests/verify_only/. A test that skips itself
+# exits 77, and is counted as skipped.
 
 set -u
 
@@ -7,21 +8,32 @@ root=$(cd "$(dirname "$0")/.." && pwd)
 
 sh "$root/scripts/check" || exit 1
 
+# A test that skips itself, saying why, exits 77: counted apart, so a skip never reads
+# as a pass.
 passed=0
 failed=0
+skipped=0
 for test_file in "$root"/tests/verify_only/*.test.sh; do
   [ -f "$test_file" ] || continue
-  if sh "$test_file" </dev/null; then
-    passed=$((passed + 1))
-    echo "ok      $test_file"
-  else
-    failed=$((failed + 1))
-    echo "not ok  $test_file"
-  fi
+  sh "$test_file" </dev/null
+  case $? in
+    0)
+      passed=$((passed + 1))
+      echo "ok      $test_file"
+      ;;
+    77)
+      skipped=$((skipped + 1))
+      echo "skip    $test_file"
+      ;;
+    *)
+      failed=$((failed + 1))
+      echo "not ok  $test_file"
+      ;;
+  esac
 done
 
-echo "verify_only: $passed passed, $failed failed"
-if [ $((passed + failed)) -eq 0 ]; then
+echo "verify_only: $passed passed, $failed failed, $skipped skipped"
+if [ $((passed + failed + skipped)) -eq 0 ]; then
   echo "verify: no tests found in tests/verify_only" >&2
   exit 1
 fi

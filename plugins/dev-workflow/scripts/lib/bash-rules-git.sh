@@ -100,8 +100,14 @@ find_git_folder() {
   git_root=${git_root:-$git_path}
 }
 
-# Sets default_branch, from what origin says, or else main.
+# Sets default_branch: the defaultBranch in the project file of the repo the command acts
+# in, as pre-push uses, else what origin says, else main.
 find_default_branch() {
+  default_branch=
+  if [ -f "$git_root/.claude/dev-workflow.json" ]; then
+    default_branch=$(jq -r '.defaultBranch // empty | strings' "$git_root/.claude/dev-workflow.json" 2>/dev/null)
+  fi
+  [ -z "$default_branch" ] || return 0
   default_branch=$(git -C "$git_path" symbolic-ref --quiet refs/remotes/origin/HEAD 2>/dev/null)
   default_branch=${default_branch#refs/remotes/origin/}
   default_branch=${default_branch:-main}

@@ -139,12 +139,15 @@ printf 'echo ran\nexit 1\n' >"$ran_by_check/verify_only/live-hooks.test.sh"
 printf 'exit 0\n' >"$ran_by_check/other.test.sh"
 assert_not_contains "$(sh "$ROOT/tests/run.sh" "$ran_by_check" 2>&1)" 'live-hooks'
 
-skipped=$(DW_SKIP_LIVE=1 sh "$live" 2>&1) || _assert_fail "the live test failed when told to skip: $skipped"
+skipped=$(DW_SKIP_LIVE=1 sh "$live" 2>&1)
+# 77 is a skip, which verify counts apart from a pass.
+[ "$?" -eq 77 ] || _assert_fail "the live test didn't skip when told to: $skipped"
 assert_contains "$skipped" 'skipped'
 assert_contains "$skipped" 'DW_SKIP_LIVE'
 
 no_claude=$(tmp_dir)
 shell_path=$(command -v sh)
-skipped=$(PATH=$no_claude DW_SKIP_LIVE='' "$shell_path" "$live" 2>&1) || _assert_fail "the live test failed without claude: $skipped"
+skipped=$(PATH=$no_claude DW_SKIP_LIVE='' "$shell_path" "$live" 2>&1)
+[ "$?" -eq 77 ] || _assert_fail "the live test didn't skip without claude: $skipped"
 assert_contains "$skipped" 'skipped'
 assert_contains "$skipped" 'claude'

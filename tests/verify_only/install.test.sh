@@ -17,7 +17,7 @@
 for needed in claude git jq; do
   if ! command -v "$needed" >/dev/null 2>&1; then
     echo "install: skipped, because $needed isn't on the PATH"
-    exit 0
+    exit 77
   fi
 done
 

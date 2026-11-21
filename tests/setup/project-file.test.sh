@@ -43,6 +43,7 @@ assert_exit 0 sh "$PF" validate "$work/base.json"
 
 invalid '{"schemaVersion": 1, "pluginVersion": "1.0.0", "commands": {"verify": "make verify"}}' "commands.check"
 invalid '{"schemaVersion": 1, "pluginVersion": "1.0.0", "commands": {"check": ""}}' "commands.check"
+invalid '{"schemaVersion": 1, "pluginVersion": "1.0.0", "commands": {"check": "   "}}' "commands.check"
 invalid '{"schemaVersion": 1, "pluginVersion": "1.0.0"}' "commands"
 invalid '{"schemaVersion": 1, "pluginVersion": "1.0.0", "commands": {"check": "x"}, "stack": "nextjs"}' "stack"
 invalid '{"schemaVersion": 1, "pluginVersion": "1.0.0", "commands": {"check": "x"}, "testComands": []}' "testComands"

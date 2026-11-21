@@ -102,6 +102,11 @@ fi
 # Nothing but deletions and notes, or nothing at all when everything is up to date.
 [ "$publishes" -eq 1 ] || exit 0
 
+# Spaces alone would run nothing and pass.
+case $DW_CHECK in
+  *[![:space:]]*) ;;
+  *) DW_CHECK= ;;
+esac
 if [ -z "$DW_CHECK" ]; then
   echo 'pre-push: no check command is configured: set commands.check in .claude/dev-workflow.json and run the setup skill' >&2
   exit 1

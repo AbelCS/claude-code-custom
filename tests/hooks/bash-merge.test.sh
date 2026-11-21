@@ -54,6 +54,23 @@ on_branch main
 rule none 'git merge feat/1-x'
 git -C "$repo" symbolic-ref --delete refs/remotes/origin/HEAD
 
+# The project file's defaultBranch comes first, as pre-push uses it: a project on trunk
+# with no origin/HEAD, such as one with no remote yet.
+cp "$repo/.claude/dev-workflow.json" "$repo/.claude/saved.json"
+jq '.defaultBranch = "trunk"' "$repo/.claude/saved.json" >"$repo/.claude/dev-workflow.json"
+on_branch trunk
+rule deny 'git merge feat/1-x' 'trunk'
+rule none 'git merge --ff-only origin/trunk'
+on_branch main
+rule none 'git merge feat/1-x'
+# Over origin/HEAD too, which can be a stale copy.
+git -C "$repo" symbolic-ref refs/remotes/origin/HEAD refs/remotes/origin/main
+on_branch trunk
+rule deny 'git merge feat/1-x' 'trunk'
+git -C "$repo" symbolic-ref --delete refs/remotes/origin/HEAD
+mv "$repo/.claude/saved.json" "$repo/.claude/dev-workflow.json"
+on_branch main
+
 # A detached HEAD is on no branch.
 git -C "$repo" update-ref refs/heads/main HEAD 2>/dev/null
 git -C "$repo" switch -q --detach main
