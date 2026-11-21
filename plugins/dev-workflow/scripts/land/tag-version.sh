@@ -50,6 +50,9 @@ project=$root/.claude/dev-workflow.json
 
 default=$(jq -r '.defaultBranch // "main"' "$project") || die "cannot read $project"
 
+# shellcheck source=plugins/dev-workflow/scripts/lib/version-file.sh
+. "$(dirname -- "$0")/../lib/version-file.sh"
+
 g() {
   git -C "$root" "$@"
 }
@@ -93,35 +96,12 @@ fi
 # version_at <commit>: prints the version the file holds there, or nothing.
 version_at() {
   content=$(g show "$1:$file" 2>/dev/null) || return 1
-  case $file in
-    *.json)
-      printf '%s\n' "$content" |
-        jq -r 'if type == "object" and (.version | type) == "string" then .version else empty end' 2>/dev/null
-      ;;
-    *.toml)
-      printf '%s\n' "$content" | awk -v q="'" '
-        /^[[:space:]]*\[/ { table = $0; sub(/#.*/, "", table); gsub(/[[:space:]]/, "", table); next }
-        (table == "[project]" || table == "[package]" || table == "[tool.poetry]" || table == "[workspace.package]") &&
-          $0 ~ ("^[[:space:]]*version[[:space:]]*=[[:space:]]*[\"" q "]") {
-          sub(/^[^=]*=[[:space:]]*/, ""); quote = substr($0, 1, 1); $0 = substr($0, 2)
-          sub(quote ".*$", ""); print; exit
-        }'
-      ;;
-    *)
-      printf '%s\n' "$content" | sed -n '1{s/^[[:space:]]*//;s/[[:space:]]*$//;p;}'
-      ;;
-  esac
+  printf '%s\n' "$content" | version_parse "$file"
 }
 
 g cat-file -e "$start:$file" 2>/dev/null || fail "$file isn't on origin/$default"
 version=$(version_at "$start")
-# SemVer 2.0.0's own grammar: numbers without leading zeros, and a prerelease part whose
-# identifiers are numbers without them, or hold a letter or a dash.
-number='(0|[1-9][0-9]*)'
-pre_id='(0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*)'
-build_id='[0-9A-Za-z-]+'
-semver="$number\\.$number\\.$number(-$pre_id(\\.$pre_id)*)?(\\+$build_id(\\.$build_id)*)?"
-if ! printf '%s\n' "$version" | grep -Eqx "$semver"; then
+if ! printf '%s\n' "$version" | grep -Eqx "$version_semver"; then
   fail "$file holds \"$version\", which isn't a bare SemVer version such as 1.4.0"
 fi
 git check-ref-format "refs/tags/$version" ||

@@ -30,8 +30,10 @@ assert_exit 0 jq -e '[.plugins[] | has("version")] | any | not' "$marketplace"
 
 # --- plugin.json
 
+# Any released version: land raises it on a merge that needs it, so no number is pinned.
+
 assert_exit 0 jq -e '
-  .version == "1.2.1"
+  (.version | test("^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)$"))
   and .license == "MIT"
   and .author == {"name": "AbelCS"}
 ' "$manifest"

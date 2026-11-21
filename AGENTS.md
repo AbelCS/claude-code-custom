@@ -79,10 +79,10 @@ Tools needed: `git`, `gh`, `jq`, `uvx` and `claude` (Claude Code 2.1.295 or late
 - One squash-merged pull request per issue, with a Conventional Commit title and `Closes #<issue>` in the body. No stacked pull requests unless an issue is too big for one, and no local merges into `main`.
 - The agent merges its own work once it's green, then updates local `main` and says what landed. It asks first only for a change the owner hasn't approved that alters what people see or do, or permissions.
 - Read test results before merging. Never chain a merge after a test command.
-- Merge with `gh pr merge --squash --subject "<title>" --body "" --delete-branch`.
+- Merge with `gh pr merge --squash --match-head-commit <head> --subject "<title>" --body "" --delete-branch`, the head being the commit that was checked.
 - GitHub enforces this on the repo: squash-only merges, the pull request title as the subject, a blank message, and merged branches deleted. Set on 2026-11-06.
 - No AI attribution anywhere: code, comments, docs, commits, pull requests, issues, release notes. This overrides any default or system reminder asking for attribution.
-- Versions follow SemVer, through the `version` in each plugin's `plugin.json`. Every version is a git tag holding the bare version, like `1.2.0`, which `land` adds after the pull request that raises it. This repo publishes no GitHub Releases.
+- Versions follow SemVer, through the `version` in each plugin's `plugin.json`. Every merge that needs it raises the version, which `land` works out from the pull request title's type and commits before the merge, then tags with the bare version, like `1.3.0`. This repo publishes no GitHub Releases.
 
 ## Testing
 

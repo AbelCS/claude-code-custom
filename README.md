@@ -49,7 +49,7 @@ Say you want to add search. You type almost nothing special: you describe the wo
 3. **Work.** Ask for the feature. Skills come in on their own: tests first, a failure debugged properly, code and screens built to the rules. You type nothing.
 4. **Commit.** Git runs `pre-commit`, which checks formatting of staged files and blocks a workflow gaining a per-PR trigger. Then `commit-msg` checks the subject, like `feat: add product search (#12)`, and rejects AI attribution.
 5. **Push.** `pre-push` runs the project's `check` command and refuses a direct push to the default branch. If `check` fails, the push doesn't happen.
-6. **Finish.** Say "land this", or just "this is done, merge it". `land` checks the acceptance criteria, runs `verify`, asks for an independent review of a larger change and a screen check if screens changed, opens the pull request, squash-merges it once green, updates your default branch, and tags the version if this change raised it. It asks first only for a change you haven't approved that alters what people see or do, money rules or permissions.
+6. **Finish.** Say "land this", or just "this is done, merge it". `land` checks the acceptance criteria, runs `verify`, asks for an independent review of a larger change and a screen check if screens changed, opens the pull request, squash-merges it once green, updates your default branch, and tags the version. In a project with a version file and no release-please, it raises the version just before the merge when the title's type calls for it: `feat`, `fix`, `perf`, or a `!` for a breaking change. It asks first only for a change you haven't approved that alters what people see or do, money rules or permissions.
 
 At the end, Claude says what landed and what was verified.
 
@@ -77,7 +77,7 @@ Nine skills. Seven come in on their own when their trigger comes up. Two start o
 | `/dev-workflow:conventions-ui` | Applies the design system, copy, theme, accessibility and touch rules | You build, change or word a screen, form, label or message |
 | `/dev-workflow:screen-check` | Checks every touched screen in a browser and fixes what it finds | Anything people see has changed |
 | `/dev-workflow:independent-review` | Gets a review by another model, with a narrow brief, and checks each finding against the code | A pull request is larger than `review_threshold_lines`, or you ask for an outside review |
-| `/dev-workflow:land` | Confirms the issue is met, runs `verify` and the reviews needed, opens the pull request, squash-merges it when green, updates the default branch and tags the version if the merge raised it | Work on a branch is finished and ready to merge |
+| `/dev-workflow:land` | Confirms the issue is met, runs `verify` and the reviews needed, opens the pull request, raises the version when the pull request's type calls for it (without release-please), squash-merges it when green, updates the default branch and tags the version | Work on a branch is finished and ready to merge |
 
 **Only when you type it:**
 
@@ -167,9 +167,14 @@ The first and third are commands inside Claude Code. The second runs in your ter
 
 ### Upgrade notes
 
+- 1.3.0: without release-please, `/dev-workflow:land` now raises the version for you. Just before each merge, in a project with a version file, it reads the pull request title's Conventional Commit type: `feat` raises the minor, `fix` and `perf` the patch, a `!` before the colon the major, and other types nothing. Before 1.0.0 each step is one lower: a breaking change raises the minor, a feature the patch. It writes the new version into the version file as one commit on the branch, `chore: release <new> (#<issue>)`, so the squash commit holds the code and its version together, and tags it after the merge. If the default branch moved on, `land` merges it into the branch first, so two pull requests can't claim the same number.
+  - A pre-release version, such as `2.0.0-rc.1`, is left alone, and so is a version you already raised by hand in the pull request. The new rules text no longer asks you to raise the version yourself.
+  - With release-please nothing changes: it batches merges into a release when you run it.
+  - This marketplace's own plugin follows the same rule, so the `dev-workflow` version now moves with every feature or fix merge, instead of once in a while.
+  - To upgrade: run the usual update steps above, then run `/dev-workflow:setup` in each project. Setup brings the new rules text in.
 - 1.2.1: fixes from a review of the whole project. The merge rule protects the default branch your project file names, such as `trunk`, even without `origin/HEAD`. A `check` command of only spaces now fails, as no check, instead of passing. Run `/dev-workflow:setup` in each project to pick up the new `pre-push`.
 - 1.2.0: a version and a GitHub Release are now separate things. Every version of a project is a git tag holding the bare version, like `1.4.0`, never `v1.4.0`.
-  - Without release-please, you raise the version in a pull request, in the project's version file: `package.json`, `pyproject.toml`, `Cargo.toml` or `VERSION` at the root. After the merge, `/dev-workflow:land` tags the commit that set that version and pushes the tag. Most merges don't change the version, so nothing is tagged then.
+  - Without release-please, the version lives in the project's version file: `package.json`, `pyproject.toml`, `Cargo.toml` or `VERSION` at the root. After the merge, `/dev-workflow:land` tags the commit that set that version and pushes the tag. In 1.2.0 you raised the version yourself in a pull request, and most merges didn't, so nothing was tagged then. From 1.3.0, `land` raises it (see above).
   - With release-please, `/dev-workflow:enable-releases` now writes a config that makes bare tags, and `land` doesn't tag. release-please works only with GitHub.
   - `pre-push` lets a tag through without running the check when its commit is already in the default branch. Other tags keep the old rule.
   - To upgrade: run the usual update steps above, then run `/dev-workflow:setup` in each project and answer the new question about the version file. Setup brings the new rules in too.
