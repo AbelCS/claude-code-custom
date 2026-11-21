@@ -34,7 +34,7 @@ Solid arrows are the spine. Dashed arrows are optional steps that join in when t
 | 5 | Commit | Git checks formatting and the commit message |
 | 6 | Push | Git runs `check` and keeps you off the default branch |
 | 7 | Land | Verify, review, open the pull request, merge it when green |
-| 8 | Merged | The repo is tidied and you hear what landed |
+| 8 | Merged | The repo is tidied, a new version is tagged, and you hear what landed |
 
 You describe the work in plain words. Claude does the steps and tells you which skill it is using ("Using land to ..."). You step in where a step needs your decision or your yes.
 
@@ -120,11 +120,19 @@ Fix the thing named and commit again. Never skip the hooks: `git commit --no-ver
 
 **What happens underneath.** `pre-push` does three things:
 
-- It refuses a direct push to the default branch ("don't push directly to main: open a pull request"). A new repo's first push is allowed.
+- It refuses a direct push to the default branch ("don't push directly to main: open a pull request"). A new repo's first push, when the remote has no branches yet, is allowed.
 - It runs the project's `check` command (format, lint, typecheck, unit tests) on the checkout. If a pushed ref isn't what's checked out, it fails, since `check` couldn't have run on it. If `check` fails, you see `pre-push: the check failed: <command>` and nothing is pushed.
 - It warns if the work tree has uncommitted changes, which the push doesn't include.
 
-With no `check` command configured, it fails visibly instead of passing silently.
+Some pushes go out without the check, because they put no new code on the remote:
+
+- Deleting a branch or a tag.
+- Notes.
+- A tag on a commit already in the remote's default branch, such as a version tagged after its pull request merged. That commit was checked before it merged.
+
+Any other tag needs its commit to be what's checked out, and the check runs.
+
+With no `check` command configured, it fails visibly instead of passing silently. A `check` of only spaces counts as none.
 
 ### 7. Land
 
@@ -141,7 +149,9 @@ With no `check` command configured, it fails visibly instead of passing silently
 5. **Pull request.** Pushes (step 6 runs again), then `gh pr create` with a Conventional Commit title ending in the issue number, a body saying what changed and what was verified, then `Closes #<issue>`.
 6. **Merge when green.** Verify passed, every finding was dealt with, and `gh pr checks` pass. Then, as its own command: `gh pr merge <n> --squash --subject "<title>" --body "" --delete-branch`.
 
-Claude Code hooks stand behind these. They block a merge chained after a test command, a local merge into the default branch, a squash merge without a blank message, a pull request title that isn't a Conventional Commit, a body without a closing keyword, and AI attribution in `gh` text. If a merge is blocked, `land` stops and asks. It never works around it: no other merge method, no `--admin`, no `--no-verify`.
+Claude Code hooks stand behind these. They block a merge chained after a test command, a local merge into the default branch, a squash merge without a blank message, a pull request title that isn't a Conventional Commit, a body without a closing keyword, and AI attribution in `gh` text. The default branch the local-merge rule protects is the one the project file names (`defaultBranch`), else origin's, else `main`.
+
+If a merge is blocked, `land` stops and asks. It never works around it: no other merge method, no `--admin`, no `--no-verify`.
 
 ### 8. Merged
 
@@ -149,7 +159,15 @@ Claude Code hooks stand behind these. They block a merge chained after a test co
 
 **What you do.** Read the report.
 
-**What happens underneath.** `land` switches to the default branch and runs `git pull --ff-only`, deletes the local branch (after checking the pull request is `MERGED`, since a squash merge looks unmerged to `git branch -d`), runs `git fetch --prune`, and confirms the issue closed. Then it reports, using `verification-before-completion`: what landed, and what was verified, including each review and what was skipped or failed. If setup applied the GitHub repo settings you approved, GitHub itself also enforces squash-only merges, the pull request title as the subject, a blank message, and deleting merged branches.
+**What happens underneath.** `land` switches to the default branch and runs `git pull --ff-only`, deletes the local branch (after checking the pull request is `MERGED`, since a squash merge looks unmerged to `git branch -d`), runs `git fetch --prune`, tags the version, and confirms the issue closed. Then it reports, using `verification-before-completion`: what landed, any version tagged, and what was verified, including each review and what was skipped or failed. If setup applied the GitHub repo settings you approved, GitHub itself also enforces squash-only merges, the pull request title as the subject, a blank message, and deleting merged branches.
+
+**The version tag.** A version is the SemVer number of the code, and every version is a git tag holding the bare number, like `1.4.0`, never `v1.4.0`. Without release-please, you raise the version in a pull request, in the project's `versionFile`. After the merge, `land` runs the plugin's `scripts/land/tag-version.sh` with the merge commit. The script tags the commit that set the version, and says one of three things:
+
+- `tagged`: the tag was missing, and now it's created and pushed.
+- `done`: the tag was already there. Most merges find this, since most don't raise the version.
+- `skip`: it says why nothing is tagged here, such as no `versionFile` set, or release-please doing the tagging.
+
+An error is reported, never worked around. A tag is never moved or deleted to make it pass. With release-please (see [Versions and releases](#versions-and-releases)), `land` doesn't tag.
 
 ## Variations
 
@@ -182,16 +200,23 @@ Same spine, different extras. Each row says what changes.
 
 Run `/dev-workflow:setup` once per project, and again after updating the plugin. The update steps are in the README's [Updating](../README.md#updating).
 
-- **It asks** only what it can't read, one question at a time, recommendation first: the stack, the commands (`check` is required, as `pre-push` runs it), whether there are screens, a database and its reset commands, the default branch if there's no remote, which per-PR workflows may stay (it recommends none), and four approvals. The approvals are: letting the agent run `gh pr merge` in auto mode, the GitHub repo's merge settings, installing missing plugins, and moving existing git hooks into `.githooks`.
+- **It reads first.** With an `origin`, it runs `git remote set-head origin --auto`, so the default branch it reads is origin's current one, not a copy from when the repo was cloned.
+- **It asks** only what it can't read, one question at a time, recommendation first: the stack, the commands (`check` is required, as `pre-push` runs it), whether there are screens, a database and its reset commands, the default branch if there's no remote, the version file, which per-PR workflows may stay (it recommends none), and four approvals. The approvals are: letting the agent run `gh pr merge` in auto mode, the GitHub repo's merge settings, installing missing plugins, and moving existing git hooks into `.githooks`.
+- **The version file** is where the project keeps its version, saved as `versionFile`. It's the file `land` reads after a merge to tag the version. Setup suggests one of `package.json`, `pyproject.toml`, `Cargo.toml` or `VERSION` at the root, once it has read that the file holds a version. With none, it can recommend adding one, starting at `0.1.0`, or say that versions then aren't tagged. It skips the question when release-please is set up, since release-please tags versions.
 - **It writes** nothing until you say yes to a plan that lists every file as create, update, keep or conflict. After the yes: `.claude/dev-workflow.json`, the rules in `AGENTS.md`, a `CLAUDE.md` that imports it, the git hooks in `.githooks/` and turning them on, the attribution settings, and `docs/decisions.md` and `docs/maintenance.md` if they're missing.
 - **It never overwrites** what you changed. A managed section in `AGENTS.md` is replaced only if you haven't edited it. If you have, your text stays and setup shows the difference. Text outside the markers is never touched. Text in an old `CLAUDE.md` moves into `AGENTS.md` first, never dropped. If git already runs hooks from another folder, setup leaves that setting alone and tells you what to add there. A rerun with nothing to change reports only `keep`.
 - **A fresh clone** has no git hooks. Run `git config core.hooksPath .githooks`, or let `npm install` do it if setup added a `prepare` script.
 
-### Releases
+### Versions and releases
 
-**Why.** CI runs only for releases, never per pull request. release-please reads the Conventional Commits on the default branch, which are your squashed pull request titles, to choose each version (SemVer, `0.x` during alpha).
+**Versions come first.** A version is the SemVer number of the code (`0.x` during alpha). A GitHub Release is a separate, optional thing on top. Every version, in every project, is a git tag holding the bare number, like `1.4.0`, never `v1.4.0`. Tags are plain git, so they work anywhere.
 
-**How.** Run `/dev-workflow:enable-releases` once. It writes release-please's config and a workflow that runs only when you start it.
+- **Without release-please,** you raise the version in a pull request, in the project's `versionFile`. After the merge, `land` tags the commit that set it and pushes the tag (step 8). `pre-push` lets that tag through without the check, since the commit was checked before it merged.
+- **With release-please,** it raises the version, tags it bare, and publishes a GitHub Release with the changelog. `land` doesn't tag. The rest of this section is about that. release-please works only with GitHub, because it uses GitHub's API.
+
+**GitHub Releases are optional.** CI runs only for releases, never per pull request. release-please reads the Conventional Commits on the default branch, which are your squashed pull request titles, to choose each version.
+
+**How.** Run `/dev-workflow:enable-releases` once. It writes release-please's config, which makes bare tags, and a workflow that runs only when you start it. An existing config isn't changed. If it writes `v` tags, it keeps them. To switch, set `include-v-in-tag` and `include-component-in-tag` to `false` yourself, and don't mix the two formats.
 
 **Each release takes two manual runs.** Start the workflow from the Actions tab, or with `gh workflow run release-please.yml`.
 
@@ -201,7 +226,7 @@ Run `/dev-workflow:setup` once per project, and again after updating the plugin.
 
 In the repo's Actions settings, "Allow GitHub Actions to create and approve pull requests" must be on.
 
-**The optional release check** runs the project's `check` on release-please's pull requests only, and goes in `ciAllowlist`. It needs a token secret of its own, such as `RELEASE_PLEASE_TOKEN`: pull requests opened with the default `GITHUB_TOKEN` don't start other workflows, so the check would never run. Without the check, the release workflow can use `GITHUB_TOKEN`. The skill recommends leaving the check out.
+**The optional release check** runs the project's `check` on release-please's pull requests only, and goes in `ciAllowlist`. It wants a token secret of its own, such as `RELEASE_PLEASE_TOKEN`. With the default `GITHUB_TOKEN`, the check's runs on each release pull request wait for someone with write access to approve them. A token of its own lets them run unattended. Without the check, the release workflow can use `GITHUB_TOKEN`. The skill recommends leaving the check out.
 
 ### Maintenance
 
@@ -214,7 +239,7 @@ In the repo's Actions settings, "Allow GitHub Actions to create and approve pull
 | Dependencies | Latest verified stable versions, one major upgrade at a time, the `audit` command |
 | Code smells | Oversized files, duplication and broken boundaries, in code changed since the last run |
 | Docs | `AGENTS.md`, README and decision log against the code, finished plans, issues already met |
-| Methodology | Reruns the setup check, and reports a newer reviewer or second-opinion model |
+| Methodology | Reruns the setup check, and reports a newer reviewer or second-opinion model, with the same code as the session-start check |
 
 Anything that alters what people see or do, money rules or permissions waits for your approval. The run ends with one line added to `docs/maintenance.md`, as `- YYYY-MM-DD: what was done`.
 
@@ -226,7 +251,7 @@ Every session in a set-up project, a hook looks over the setup and prints one li
 
 - `git`, `gh` and `jq` are on the PATH.
 - The git hooks are on: "git hooks aren't active here, so nothing checks commits or pushes." The fix is `git config core.hooksPath .githooks`.
-- `.claude/dev-workflow.json` is valid, and not older than the plugin: "this project was set up with an older version of the plugin ... Run /dev-workflow:setup to upgrade it."
+- `.claude/dev-workflow.json` holds one JSON object, and isn't older than the plugin. It doesn't check the file against the schema. If the file is broken, it says to fix it or run setup. If it's older: "this project was set up with an older version of the plugin ... Run /dev-workflow:setup to upgrade it."
 - The plugins the project relies on are installed. The screen plugins only count in a project with screens.
 - Maintenance isn't overdue.
 - A newer GPT model than the reviewer or the second-opinion model uses, when Codex lists one. It only says so. You change the setting in `/config`.
@@ -281,6 +306,9 @@ Subagents get the model from these settings. The main session's model is your ch
 | **Issue** | A GitHub issue holding a task's objective, scope and acceptance criteria |
 | **Branch name** | `<type>/<issue>-<slug>`, like `fix/14-empty-cart`. The issue number is read from it |
 | **Conventional Commit** | A subject shaped `<type>(<scope>): <subject>`, like `feat: add search (#12)`. Commits and pull request titles use it |
+| **Version** | The SemVer number of the project's code, kept in its `versionFile`. Every version is marked by a git tag |
+| **Tag** | A git tag holding the bare version, like `1.4.0`, never `v1.4.0`. `land` makes it after the merge that raised the version, or release-please does |
+| **GitHub Release** | An optional page on GitHub for a version, with its changelog. Only projects that run `/dev-workflow:enable-releases` have them. It's separate from the version and its tag |
 | **Squash merge** | Merging a pull request as one commit on the default branch, titled with the pull request's title and with a blank message |
 | **Spec** | An approved write-up of a significant decision, in `docs/superpowers/specs/` |
 | **Plan** | The steps of multi-step work, in `docs/superpowers/plans/`, linked from the issue |
@@ -288,6 +316,7 @@ Subagents get the model from these settings. The main session's model is your ch
 | **Managed section** | A part of the project's `AGENTS.md` that the plugin owns and can upgrade. Your edits to one are kept and shown on a rerun |
 | **Project file** | `.claude/dev-workflow.json`. The facts the hooks need about the project. Its presence turns the Claude Code hooks on |
 | **`check`** | The project's fast command: format, lint, typecheck, unit tests. `pre-push` runs it |
+| **`versionFile`** | The file that holds the project's version, such as `package.json`. `land` reads it to tag a version |
 | **`verify`** | `check` plus the slower database and end-to-end tests. `land` runs it |
 | **Git hook** | A script git runs on commit and push. Setup copies them into `.githooks/`. They work for anyone who commits there |
 | **Claude Code hook** | A script that comes with the plugin and runs before Claude's commands and edits, and at session start |
