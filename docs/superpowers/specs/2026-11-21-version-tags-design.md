@@ -78,3 +78,10 @@ The workflow rules in `AGENTS.md`, in the template and here, replace "Releases f
 - Choosing the next version automatically without release-please. A person or the agent raises it in the pull request.
 - GitLab or Bitbucket support.
 - Changelogs without release-please.
+
+## Known limits
+
+Both were found in the independent review and left on purpose: each is rare, and its fix costs more than the harm it prevents.
+
+- **`main` rewritten on GitHub after the last fetch.** `pre-push` judges a tag by the local copy of the remote's default branch. If `main` was force-pushed since, a tag on a commit that left it still goes out without the check. That commit was checked when it merged, and the workflow never force-pushes `main`. Asking GitHub on every tag push would cost a network call each time.
+- **TOML multiline strings.** The `.toml` reader works line by line. A multiline string holding text like `[project]` and `version = "..."` could be read as the version. Reading TOML properly needs a real parser, which POSIX `sh` doesn't have, and the plugin's scripts don't depend on Python or Node.

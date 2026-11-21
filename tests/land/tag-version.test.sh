@@ -253,8 +253,9 @@ assert_exit 1 test -n "$(git -C "$repo" tag -l)"
 
 # --- What can't be tagged
 
-# Not a bare SemVer version.
-for bad in v1.2.0 1.2 'latest' ''; do
+# Not a bare SemVer version, including the identifier rules: no leading zero in a
+# number, and no empty part.
+for bad in v1.2.0 1.2 'latest' '' 01.2.3 1.2.3-01 1.2.3-rc.01 1.2.3-rc..1 1.2.3-rc. 1.2.3- 1.2.3+ 1.2.3+a..b; do
   new_fixture VERSION
   commit_file VERSION "$bad" >/dev/null
   publish
@@ -262,6 +263,32 @@ for bad in v1.2.0 1.2 'latest' ''; do
   assert_contains "$(run 2>&1)" 'SemVer'
   assert_exit 1 test -n "$(git -C "$repo" tag -l)"
 done
+
+# Valid SemVer, prerelease and build parts included.
+for good in 1.2.3-0 1.2.3-rc.1 1.2.3-alpha-1 1.2.3-0a.1 1.2.3+build.01 1.2.3-rc.1+sha.5114f85; do
+  new_fixture VERSION
+  commit_file VERSION "$good" >/dev/null
+  publish
+  assert_contains "$(run)" "tagged $good"
+done
+
+# SemVer, but not a name git allows for a tag: said as that, not as bad SemVer.
+new_fixture VERSION
+commit_file VERSION 1.2.3+ci.lock >/dev/null
+publish
+assert_exit 1 run
+assert_contains "$(run 2>&1)" 'tag name'
+
+# --- origin's default branch has changed: the project file is out of date, so it stops
+
+new_fixture VERSION
+commit_file VERSION 1.0.0 >/dev/null
+publish
+git -C "$repo" push -q origin main:trunk
+git -C "$origin" symbolic-ref HEAD refs/heads/trunk
+assert_exit 1 run
+assert_contains "$(run 2>&1)" 'trunk'
+assert_exit 1 test -n "$(remote_tag 1.0.0)"
 
 # JSON without a version.
 new_fixture package.json

@@ -18,7 +18,9 @@
 # The tag goes on the commit that set that version: walking back along the default
 # branch's own line, first parents only, through the commits that touched the file, the
 # oldest one in the run still holding it. So it doesn't matter how many merges came
-# after. A shallow clone can't show that, so it stops. A tag already there, locally or on origin, is never
+# after. A shallow clone can't show that, so it stops, and so does a project file whose
+# defaultBranch isn't origin's. The version follows SemVer 2.0.0's grammar, and has to be
+# a name git allows for a tag. A tag already there, locally or on origin, is never
 # moved: on another commit, it's reported.
 #
 # Exits 1 when the version can't be tagged, saying why, and 2 on bad usage or a folder
@@ -69,6 +71,12 @@ fetch() {
 
 [ "$(g rev-parse --is-shallow-repository)" = false ] ||
   fail "this is a shallow clone, which can't show the commit that set the version: run git fetch --unshallow, then try again"
+# A project file that names another branch than origin's own would tag the wrong line.
+head=$(g ls-remote --symref origin HEAD) || fail "could not read origin's default branch"
+head=$(printf '%s\n' "$head" | awk '$1 == "ref:" && $3 == "HEAD" && sub(/^refs\/heads\//, "", $2) { print $2 }')
+if [ -n "$head" ] && [ "$head" != "$default" ]; then
+  fail "origin's default branch is $head, but the project file says $default: run the setup skill to update it, then try again"
+fi
 fetch "+refs/heads/$default:refs/remotes/origin/$default" ||
   fail "could not fetch $default from origin"
 tip=$(g rev-parse -q --verify "refs/remotes/origin/$default^{commit}") ||
@@ -105,11 +113,17 @@ version_at() {
 
 g cat-file -e "$start:$file" 2>/dev/null || fail "$file isn't on origin/$default"
 version=$(version_at "$start")
-if ! printf '%s\n' "$version" |
-  grep -Eqx '(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?' ||
-  ! git check-ref-format "refs/tags/$version"; then
+# SemVer 2.0.0's own grammar: numbers without leading zeros, and a prerelease part whose
+# identifiers are numbers without them, or hold a letter or a dash.
+number='(0|[1-9][0-9]*)'
+pre_id='(0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*)'
+build_id='[0-9A-Za-z-]+'
+semver="$number\\.$number\\.$number(-$pre_id(\\.$pre_id)*)?(\\+$build_id(\\.$build_id)*)?"
+if ! printf '%s\n' "$version" | grep -Eqx "$semver"; then
   fail "$file holds \"$version\", which isn't a bare SemVer version such as 1.4.0"
 fi
+git check-ref-format "refs/tags/$version" ||
+  fail "$file holds \"$version\", which is SemVer, but git doesn't allow it as a tag name"
 
 target=
 for commit in $(g rev-list --first-parent "$start" -- ":(literal)$file"); do
