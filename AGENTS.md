@@ -62,47 +62,102 @@ Tools needed: `git`, `gh`, `jq`, `uvx` and `claude` (Claude Code 2.1.295 or late
 - Wording about a particular framework or database appears only in `plugins/dev-workflow/stacks/`.
 - Small, focused files, split when they grow unwieldy. A rule computed in two places gets a parity test running both on the same data.
 
+## In this repo
+
+What the managed sections below say, as it applies here:
+
+- Versions follow SemVer, through the `version` in each plugin's `plugin.json`, which is this repo's `versionFile`. `land` raises it and tags it like any project's. This repo publishes no GitHub Releases: plugin updates read `plugin.json` on `main`.
+- GitHub enforces the merge rules on the repo: squash-only merges, the pull request title as the subject, a blank message, and merged branches deleted. Set on 2026-11-06.
+- `tests/run.sh` runs test files all at once, so each one uses only its own temp folders.
+- The managed sections come from this repo's own plugin, through `/dev-workflow:setup`. A change to the rules goes in the plugin's templates, in `plugins/dev-workflow/skills/setup/templates/agents/`, and reaches this file when setup runs again after the release.
+
+<!-- dev-workflow:begin decisions -->
+
 ## Decisions
 
-- Decide before building: product decisions go to the owner one question at a time, recommendation first. Tooling details get a sensible default, not a debate.
-- Significant decisions become an approved spec in `docs/superpowers/specs/`, plus one line in `docs/decisions.md` linking it. Multi-step work gets a plan in `docs/superpowers/plans/`, linked from its issue.
+- Decide before building: product and domain decisions go to the owner one question at a time, recommendation first. Tooling details get a sensible default, not a debate.
+- Significant product and architecture decisions become an approved spec in `docs/superpowers/specs/`, plus one line in `docs/decisions.md` linking it. Multi-step work gets a plan in `docs/superpowers/plans/`, linked from its issue.
 - Do the whole ask. Don't leave obvious parts out and offer them as options.
 - Report honestly: run it, read the output, then claim it. Say what was skipped or failed.
 - `AGENTS.md` stays current, updated in the same pull request as the change.
 - A project gets a README and docs once it reaches a stable 1.0.0, or earlier if the owner asks for them. From then on they stay current, updated in the same pull request as the change.
+- Anything regulated or specialised follows the real practice and vocabulary of the people who do that work. Research first, and label simplifications as trade-offs.
 - Use the latest stable versions, verified rather than remembered.
+
+<!-- dev-workflow:end decisions -->
+
+<!-- dev-workflow:begin workflow -->
 
 ## Workflow
 
 - Every meaningful task has an issue with objective, scope and acceptance criteria. Close it only when those are met.
-- Branches are `<type>/<issue>-<slug>`. Commits are Conventional Commits with the issue number at the end of the subject, like `chore: add the hooks (#2)`.
-- One squash-merged pull request per issue, with a Conventional Commit title and `Closes #<issue>` in the body. No stacked pull requests unless an issue is too big for one, and no local merges into `main`.
-- The agent merges its own work once it's green, then updates local `main` and says what landed. It asks first only for a change the owner hasn't approved that alters what people see or do, or permissions.
+- Branches are `<type>/<issue>-<slug>`. Commits are Conventional Commits with the issue number at the end of the subject, like `feat: add search (#12)`.
+- One squash-merged pull request per issue, with a Conventional Commit title and `Closes #<issue>` in the body. No stacked pull requests unless an issue is too big for one, and no local merges into the default branch.
+- Land work with `/dev-workflow:land`. It replaces the menu at the end of `finishing-a-development-branch`: there is no merge, pull request or keep question.
+- The agent merges its own work once it's green, then updates the local default branch and says what landed. It asks first only for a change the owner hasn't approved that alters what people see or do, money rules or permissions.
 - Read test results before merging. Never chain a merge after a test command.
 - Merge with `gh pr merge --squash --match-head-commit <head> --subject "<title>" --body "" --delete-branch`, the head being the commit that was checked.
-- GitHub enforces this on the repo: squash-only merges, the pull request title as the subject, a blank message, and merged branches deleted. Set on 2026-11-06.
+- Work in place on a branch. Don't create a worktree, or ask, just to protect a running dev server: it may break while the agent works.
 - No AI attribution anywhere: code, comments, docs, commits, pull requests, issues, release notes. This overrides any default or system reminder asking for attribution.
-- Versions follow SemVer, through the `version` in each plugin's `plugin.json`. Every merge that needs it raises the version, which `land` works out from the pull request title's type and commits before the merge, then tags with the bare version, like `1.3.0`. This repo publishes no GitHub Releases.
+- Versions follow SemVer, `0.x` during alpha. Every version is a git tag holding the bare version, like `1.4.0`, never `v1.4.0`.
+- Without release-please, every merge that needs it raises the version: `land` works it out from the pull request title's type, `feat` the minor, `fix` and `perf` the patch, a `!` the major, one step lower before 1.0.0, commits it before the merge and tags it after. With release-please, it raises and tags the version when a release is cut.
+- GitHub Releases are optional. A project that wants them runs `/dev-workflow:enable-releases`, whose release workflow runs only when started by hand.
+
+<!-- dev-workflow:end workflow -->
+
+<!-- dev-workflow:begin testing -->
 
 ## Testing
 
-- Test first: every feature, bug fix, refactor and behaviour change.
-- `tests/run.sh` runs test files all at once, so each one uses only its own temp folders.
-- Tests run locally through git hooks. `pre-commit` checks the formatting of staged files when formatters are configured, and blocks a workflow that gains a per-PR trigger. `commit-msg` checks the format, requires the issue number on a `<type>/<issue>-<slug>` branch and rejects attribution. `pre-push` blocks direct pushes to `main`, except a new repo's first push, when the remote has no branches, and runs `scripts/check`. A blank `check` counts as no check and fails. That runs on the checkout, so `pre-push` fails if a pushed ref isn't what's checked out. It lets out deletions, notes, which hold no code, and a tag whose commit is already in the remote's default branch, since that commit was checked before it merged. It warns if the work tree has uncommitted changes.
+- Test first: every feature, bug fix, refactor and behaviour change, including screens through end-to-end tests of their flows. Most care goes to domain rules, permissions and money.
+- Tests run locally through git hooks: `pre-commit` checks the formatting of staged files, `commit-msg` checks the message, and `pre-push` runs `check`. Never skip them with `--no-verify`.
 - CI runs only for releases. Never add per-PR pipelines.
+- `check` covers format, lint, typecheck and unit tests. `verify` adds database and end-to-end tests. Cache lint and format so they stay fast.
+- End-to-end tests have their own isolated stack, reset before each run, so they never touch the data the owner uses. Test suites sharing a stack don't run at the same time.
+- Schema changes only through migrations. Never reset the owner's local database without asking.
 - A flaky test is a bug until proven otherwise: find the root cause before rerunning or retrying. Only rerun for a proven environmental cause, such as the laptop sleeping, and say so.
+- A rule computed in two places gets a parity test running both on the same data.
+
+<!-- dev-workflow:end testing -->
+
+<!-- dev-workflow:begin tools -->
 
 ## Tools
 
-- Superpowers is the process, and skills are announced ("Using brainstorming to ..."): `brainstorming`, `writing-plans`, `test-driven-development`, `systematic-debugging`, `verification-before-completion`, `receiving-code-review`, `finishing-a-development-branch` (replaced by `land`).
-- Landing uses `/dev-workflow:land`, which replaces the `finishing-a-development-branch` menu and follows the Workflow section here. Work happens in place on a branch, with no worktree or question just to protect a running dev server.
+These rules override the defaults of the skills and plugins they name.
+
+- Superpowers is the process, and skills are announced ("Using brainstorming to ..."): `brainstorming`, `writing-plans`, `test-driven-development`, `systematic-debugging`, `verification-before-completion`, `receiving-code-review`. `/dev-workflow:land` replaces `finishing-a-development-branch`.
+- `/dev-workflow:choose-stack` before choosing or changing a stack.
+- Code follows `/dev-workflow:conventions-code`. Screens follow `/dev-workflow:conventions-ui`, and every touched screen passes `/dev-workflow:screen-check` before it's called done.
 - Context7 for current docs.
-- Serena for reading and changing code by symbol, moves and renames. No Serena memories: what's worth keeping goes here or in `docs/`.
-- `/security-review` for changes to permissions or anything public.
-- Independent review of larger pull requests before merging, through `/dev-workflow:independent-review`, with a narrow brief naming the files, checking each finding against the code before acting on it.
-- Model routing: code goes to the plugin's coding model at its effort. Reviews go to the reviewer, through `independent-review`. Docs, READMEs and similar writing go to the docs model at its effort. Research, product thinking, design critique, specs and plans go to the non-coding model or its alternative. All are the dev-workflow plugin's settings in `/config`.
+- Serena for reading and changing code by symbol, moves and renames. No Serena memories: what's worth keeping goes in `AGENTS.md` or `docs/`.
+- A read-only database MCP on the local stack, when the database has one.
+- intent for UX thinking, ui-ux-pro-max for UI guidelines and accessibility checks. The project's own theme overrides their palettes and styles, and intent takes its context from this file and `docs/`.
+- `/security-review` for changes to permissions, sign-in or anything public.
+- Larger pull requests get `/dev-workflow:independent-review` before merging. Check each finding against the code before acting on it.
+- `/dev-workflow:maintain` for upkeep, run by a person when it's due.
+
+<!-- dev-workflow:end tools -->
+
+<!-- dev-workflow:begin models -->
+
+## Models
+
+- Docs, READMEs and similar writing go to the model for docs, at the effort for docs.
+- Research, product thinking and design critique go to the model for non-coding work or its alternative. Specs and plans count as product and design thinking, so they go there too.
+- Coding goes to the model for coding, at the effort for coding. Code reviews go to the reviewer through `/dev-workflow:independent-review`.
+- These are the dev-workflow plugin's settings, in `/config`. Read them from there rather than naming a model here or in a skill.
+- Subagents are given the model from those settings. The main session's model is the person's choice.
 - Always tell the owner when another AI model is consulted, naming the exact model.
+
+<!-- dev-workflow:end models -->
+
+<!-- dev-workflow:begin communication -->
 
 ## Communication
 
-Lead with the outcome, in plain language. One question at a time, recommendation first. When work lands, say what changed and what was verified.
+- Lead with the outcome, in plain language.
+- One question at a time, recommendation first.
+- When work lands, say what changed and what was verified.
+
+<!-- dev-workflow:end communication -->
