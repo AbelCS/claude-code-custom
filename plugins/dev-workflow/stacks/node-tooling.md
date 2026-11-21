@@ -42,7 +42,7 @@ Fast checks first, so `check` stays quick enough for every push:
 }
 ```
 
-`check` is format, lint, types and unit tests. `verify` adds the database and end-to-end tests. Keep the caches out of git: Prettier's and ESLint's sit in `node_modules/.cache/` and `.eslintcache`.
+`check` is format, lint, types and unit tests. The example `verify` adds the end-to-end tests. A project with a database adds its database test command to `verify` too. Keep the caches out of git: Prettier's and ESLint's sit in `node_modules/.cache/` and `.eslintcache`.
 
 `setup` adds a `prepare` script that turns the git hooks on, so `npm install` does it in a fresh clone. Keep it when editing scripts.
 

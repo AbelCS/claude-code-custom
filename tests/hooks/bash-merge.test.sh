@@ -54,6 +54,40 @@ on_branch main
 rule none 'git merge feat/1-x'
 git -C "$repo" symbolic-ref --delete refs/remotes/origin/HEAD
 
+# The project file's defaultBranch comes first, as pre-push uses it: a project on trunk
+# with no origin/HEAD, such as one with no remote yet.
+cp "$repo/.claude/dev-workflow.json" "$repo/.claude/saved.json"
+jq '.defaultBranch = "trunk"' "$repo/.claude/saved.json" >"$repo/.claude/dev-workflow.json"
+on_branch trunk
+rule deny 'git merge feat/1-x' 'trunk'
+rule none 'git merge --ff-only origin/trunk'
+on_branch main
+rule none 'git merge feat/1-x'
+# Over origin/HEAD too, which can be a stale copy.
+git -C "$repo" symbolic-ref refs/remotes/origin/HEAD refs/remotes/origin/main
+on_branch trunk
+rule deny 'git merge feat/1-x' 'trunk'
+# A project file that names no usable branch isn't believed: origin/HEAD, then main,
+# decide. One that doesn't parse whole is refused outright, here; read through git -C in
+# another repo, it gives nothing, rather than what came before the break.
+on_branch main
+printf '{"defaultBranch": "a b"}\n' >"$repo/.claude/dev-workflow.json"
+rule deny 'git merge feat/1-x' 'main'
+printf '{"defaultBranch": "trunk"} not json\n' >"$repo/.claude/dev-workflow.json"
+rule deny 'git merge feat/1-x' 'is broken'
+other="$(tmp_dir)/other"
+new_repo "$other"
+git -C "$other" commit -q --allow-empty -m 'chore: start'
+git -C "$other" branch feat/1-x
+mkdir "$other/.claude"
+printf '{"defaultBranch": "trunk"} not json\n' >"$other/.claude/dev-workflow.json"
+mv "$repo/.claude/saved.json" "$repo/.claude/dev-workflow.json"
+cp "$repo/.claude/dev-workflow.json" "$repo/.claude/saved.json"
+rule deny "git -C '$other' merge feat/1-x" 'this is a local merge into main'
+git -C "$repo" symbolic-ref --delete refs/remotes/origin/HEAD
+mv "$repo/.claude/saved.json" "$repo/.claude/dev-workflow.json"
+on_branch main
+
 # A detached HEAD is on no branch.
 git -C "$repo" update-ref refs/heads/main HEAD 2>/dev/null
 git -C "$repo" switch -q --detach main

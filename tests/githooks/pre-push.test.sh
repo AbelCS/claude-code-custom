@@ -177,6 +177,11 @@ check_did_not_run
 
 # A deletion runs nothing, so it doesn't need one.
 assert_exit 0 feed "(delete) $zero refs/heads/old $(sha_of main)"
+
+# Spaces alone would run nothing and pass, so they count as none too.
+write_env main '  	 '
+assert_exit 1 feed "$(line_for feat/1-x feat/1-x)"
+assert_contains "$(feed_output "$(line_for feat/1-x feat/1-x)")" 'no check command is configured'
 write_env main scripts/check
 
 # --- Fed: the default branch

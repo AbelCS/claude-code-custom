@@ -2,7 +2,7 @@
 name: maintain
 description: Run by a person when maintenance is due, or the session start says it's overdue. Sweeps merged branches, dead code, dependencies, code smells, docs and the methodology's setup, lands each area's fixes through its own issue and pull request, and records the run in docs/maintenance.md.
 disable-model-invocation: true
-allowed-tools: Read Glob Grep Bash(sh ${CLAUDE_PLUGIN_ROOT}/scripts/maintain/merged-branches.sh *) Bash(sh ${CLAUDE_PLUGIN_ROOT}/scripts/setup/detect.sh *) Bash(sh ${CLAUDE_PLUGIN_ROOT}/scripts/setup/tools.sh *) Bash(sh ${CLAUDE_PLUGIN_ROOT}/scripts/setup/run.sh * --plan *) Bash(git status *) Bash(git log *) Bash(git worktree list *)
+allowed-tools: Read Glob Grep Bash(sh ${CLAUDE_PLUGIN_ROOT}/scripts/maintain/merged-branches.sh *) Bash(sh ${CLAUDE_PLUGIN_ROOT}/scripts/maintain/newer-models.sh *) Bash(sh ${CLAUDE_PLUGIN_ROOT}/scripts/setup/detect.sh *) Bash(sh ${CLAUDE_PLUGIN_ROOT}/scripts/setup/tools.sh *) Bash(sh ${CLAUDE_PLUGIN_ROOT}/scripts/setup/run.sh * --plan *) Bash(git status *) Bash(git log *) Bash(git worktree list *)
 ---
 
 # Maintain
@@ -67,7 +67,16 @@ ANSWERS
 
 If it shows only `keep`, the setup is current. Otherwise run `/dev-workflow:setup` for what it lists, in this area's pull request.
 
-Then report when a newer reviewer or second-opinion model is available, as the session-start check does. The models in use are the one after `-m` or `--model` in `${user_config.reviewer_command}`, and `${user_config.model_noncoding_alt}`, each from the defaults when unsaved. Grep `"slug"` in `models_cache.json` in Codex's folder, `$CODEX_HOME` or else `~/.codex`. A listed slug is newer when it has the same family, the last part of the name, and a higher version, compared as numbers, so 6.10 is newer than 6.9 and a missing minor counts as 0. Say which setting to change in `/config`, and change none: that's the person's call. No file, or none in use that names a version, means nothing to report.
+Then report when a newer reviewer or second-opinion model is available, with the same code the session-start check uses:
+
+```sh
+sh ${CLAUDE_PLUGIN_ROOT}/scripts/maintain/newer-models.sh <<'SETTINGS'
+${user_config.model_noncoding_alt}
+${user_config.reviewer_command}
+SETTINGS
+```
+
+Each line it prints names a newer model and the setting to change in `/config`. Pass them on, and change none: that's the person's call. No output means nothing to report.
 
 ## 7. Record the run
 

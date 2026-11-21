@@ -57,7 +57,7 @@ The committed test checks these. With `"onFailure": "block"`, each of these stop
 
 ## The session-start check
 
-The committed test checks that its line reached the session in a set-up repo where git hooks were off, as one JSON object with the same text in `systemMessage`, for the person, and `additionalContext`, for Claude, and that it printed nothing in a repo without a project file.
+The committed test checks that, in a set-up repo where git hooks were off, the session-start hook's output in the session's event stream is one JSON object whose `additionalContext` equals its `systemMessage`, and that the text names `dev-workflow` and the `git config core.hooksPath .githooks` command. It also checks that the hook printed nothing in a repo without a project file. It doesn't check what the person sees.
 
 In one-off hand runs on 2026-11-20, on Claude Code 2.1.328 with plugin 1.1.1, a `-p` session asked about its context quoted the line's git command, so Claude got the text. In `--output-format stream-json`, the `systemMessage` appeared only inside the hook's own `hook_response` event, with no separate message for it, so what the person sees was checked in the docs, not in a session.
 

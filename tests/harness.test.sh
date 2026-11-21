@@ -382,6 +382,22 @@ assert_exit 1 run_stubbed verify "$fixture"
 STUB_FAIL_ON=""
 assert_not_contains "$(cat "$STUB_LOG")" "verify_only"
 
+# A test that skips itself exits 77. It's counted and named as skipped, never as passed,
+# and doesn't fail verify.
+cat >"$fixture/tests/verify_only/c.test.sh" <<'STUB'
+#!/bin/sh
+echo 'c: skipped, because of a reason'
+exit 77
+STUB
+output=$(run_stubbed verify "$fixture")
+assert_exit 0 run_stubbed verify "$fixture"
+assert_exit 0 test "$(printf '%s\n' "$output" | grep -c '^skip    .*/verify_only/c\.test\.sh$')" = 1
+assert_contains "$output" "2 passed, 0 failed, 1 skipped"
+assert_contains "$output" "c: skipped, because of a reason"
+# The same under sh -e, where a test's own exit status mustn't end verify.
+output=$(PATH="$stub_bin:$PATH" STUB_LOG="$STUB_LOG" STUB_FAIL_ON='' sh -e "$fixture/scripts/verify" 2>&1)
+assert_contains "$output" "2 passed, 0 failed, 1 skipped"
+
 # No verify_only tests to run is a failure, never a pass.
 fixture=$(new_fixture)
 assert_exit 1 run_stubbed verify "$fixture"

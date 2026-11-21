@@ -45,7 +45,7 @@
         "check": {
           "description": "The fast checks the pre-push hook runs, such as npm run check. Every project needs one.",
           "type": "string",
-          "minLength": 1,
+          "pattern": "\\S",
           "x-error": "has to be the command that runs the fast checks, such as npm run check"
         },
         "verify": { "description": "The full checks, before a release.", "type": "string" },

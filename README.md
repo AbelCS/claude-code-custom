@@ -28,7 +28,7 @@ Check [Requirements](#requirements) for what you need first.
 - It reads the repo and checks the tools. It works on a new project, an existing one, or one set up with an older version.
 - It asks only what it can't read, one question at a time, with its recommendation first: the stack, the commands for `check` and `verify`, the file that holds the project's version, whether there are screens or a database, and a few approvals.
 - It shows every file it would create or update, and every conflict it will leave alone. It writes nothing until you say yes.
-- After the yes, it writes `.claude/dev-workflow.json`, the rules in `AGENTS.md` and a `CLAUDE.md` that imports them, the git hooks in `.githooks/`, the attribution settings, and `docs/decisions.md` and `docs/maintenance.md` if they're missing. It also turns the git hooks on.
+- After the yes, it writes `.claude/dev-workflow.json`, the rules in `AGENTS.md` and a `CLAUDE.md` that imports them, the git hooks in `.githooks/`, the attribution settings, and `docs/decisions.md` and `docs/maintenance.md` if they're missing. It also turns the git hooks on, unless git already runs hooks from another folder (a `core.hooksPath` set elsewhere, or a hook manager such as husky or lefthook). Then it leaves that alone and says what to add there.
 - With your approval, it also sets the GitHub repo to squash-only merges with a blank message, and to delete merged branches.
 - Git hooks aren't cloned. In a fresh clone, turn them on yourself:
 
@@ -165,6 +165,7 @@ The first and third are commands inside Claude Code. The second runs in your ter
 
 ### Upgrade notes
 
+- 1.2.1: fixes from a review of the whole project. The merge rule protects the default branch your project file names, such as `trunk`, even without `origin/HEAD`. A `check` command of only spaces now fails, as no check, instead of passing. Run `/dev-workflow:setup` in each project to pick up the new `pre-push`.
 - 1.2.0: a version and a GitHub Release are now separate things. Every version of a project is a git tag holding the bare version, like `1.4.0`, never `v1.4.0`.
   - Without release-please, you raise the version in a pull request, in the project's version file: `package.json`, `pyproject.toml`, `Cargo.toml` or `VERSION` at the root. After the merge, `/dev-workflow:land` tags the commit that set that version and pushes the tag. Most merges don't change the version, so nothing is tagged then.
   - With release-please, `/dev-workflow:enable-releases` now writes a config that makes bare tags, and `land` doesn't tag. release-please works only with GitHub.
@@ -180,7 +181,7 @@ For people coming from 0.x or from `web-dev-workflow`:
 - Old projects keep working, but their rules didn't load. The old `CLAUDE.md` pointer didn't import them. Rerun `/dev-workflow:setup` in each one, which recognises the old blocks and pointers and replaces them.
 - `/dev-workflow:enable-releases` now creates a workflow that runs only when you start it. Existing workflows aren't changed. If one runs release-please on every push, the skill says so and offers to replace it.
 - A manual release takes two runs. The first, from the Actions tab or `gh workflow run release-please.yml`, opens or updates the release pull request. After you merge it, a second run tags the release.
-- The optional release check needs a token secret of its own, such as `RELEASE_PLEASE_TOKEN`. Pull requests opened with the default `GITHUB_TOKEN` don't start other workflows, so the check would never run. Without the check, the release workflow can use `GITHUB_TOKEN`. Also turn on "Allow GitHub Actions to create and approve pull requests" in the repo's Actions settings.
+- The optional release check needs a token secret of its own, such as `RELEASE_PLEASE_TOKEN`. With the default `GITHUB_TOKEN`, the check's runs wait for someone to approve them on each release pull request. A token of its own lets them run unattended. Without the check, the release workflow can use `GITHUB_TOKEN`. Also turn on "Allow GitHub Actions to create and approve pull requests" in the repo's Actions settings.
 
 ## Requirements
 

@@ -28,10 +28,10 @@ spec=docs/superpowers/specs/2026-11-05-dev-workflow-methodology-design.md
 assert_exit 0 test -f "$ROOT/$spec"
 assert_exit 0 test -f "$ROOT/docs/superpowers/plans/2026-11-05-dev-workflow-methodology.md"
 assert_contains "$(cat "$ROOT/docs/decisions.md")" "${spec#docs/}"
-# It explains the format and records no run until one has happened.
+# It explains the format, and each run is a dated list item.
 maintenance=$(cat "$ROOT/docs/maintenance.md")
 assert_contains "$maintenance" "YYYY-MM-DD"
-assert_exit 1 grep -Eq '^- |[0-9]{4}-[0-9]{2}-[0-9]{2}' "$ROOT/docs/maintenance.md"
+assert_exit 0 grep -Eq '^- [0-9]{4}-[0-9]{2}-[0-9]{2}: ' "$ROOT/docs/maintenance.md"
 # What the live tests saw, with the version they saw it on.
 assert_exit 0 grep -Eq 'Claude Code [0-9]+\.[0-9]+\.[0-9]+' "$ROOT/docs/hook-behaviour.md"
 
