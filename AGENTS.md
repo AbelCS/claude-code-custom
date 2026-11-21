@@ -81,7 +81,7 @@ Tools needed: `git`, `gh`, `jq`, `uvx` and `claude` (Claude Code 2.1.295 or late
 - Merge with `gh pr merge --squash --subject "<title>" --body "" --delete-branch`.
 - GitHub enforces this on the repo: squash-only merges, the pull request title as the subject, a blank message, and merged branches deleted. Set on 2026-11-06.
 - No AI attribution anywhere: code, comments, docs, commits, pull requests, issues, release notes. This overrides any default or system reminder asking for attribution.
-- Releases follow SemVer, through the `version` in each plugin's `plugin.json`.
+- Versions follow SemVer, through the `version` in each plugin's `plugin.json`. Every version is a git tag holding the bare version, like `1.2.0`, which `land` adds after the pull request that raises it. This repo publishes no GitHub Releases.
 
 ## Testing
 

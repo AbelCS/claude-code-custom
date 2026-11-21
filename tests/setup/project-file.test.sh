@@ -60,6 +60,13 @@ invalid '{"schemaVersion": 1, "pluginVersion": "1.0.0", "commands": {"check": "x
   "formatCheckStaged": [{"glob": "*.js|x", "command": "y"}]}}' "glob"
 assert_exit 2 sh "$PF" validate "$work/missing.json"
 
+# versionFile: a file's path from the repo's root, which can't lead out of it.
+printf '%s\n' '{"schemaVersion": 1, "pluginVersion": "1.0.0", "commands": {"check": "x"}, "versionFile": "plugins/app/.claude-plugin/plugin.json"}' >"$work/version.json"
+assert_exit 0 sh "$PF" validate "$work/version.json"
+for bad in '""' '"/etc/version"' '"../VERSION"' '"a/../../VERSION"' '"dir/"' '1'; do
+  invalid '{"schemaVersion": 1, "pluginVersion": "1.0.0", "commands": {"check": "x"}, "versionFile": '"$bad"'}' "versionFile"
+done
+
 # --- write: a mixed repo with two formatters round-trips into the env file
 
 r=$work/mixed
@@ -78,7 +85,8 @@ cat >"$work/mixed-answers.json" <<'JSON'
     ]
   },
   "testCommands": ["npm test"],
-  "ciAllowlist": [".github/workflows/release check.yml", ".github/workflows/it's.yml"]
+  "ciAllowlist": [".github/workflows/release check.yml", ".github/workflows/it's.yml"],
+  "versionFile": "package.json"
 }
 JSON
 out=$(run write "$r" "$work/mixed-answers.json")
@@ -86,6 +94,7 @@ assert_exit 0 test -f "$r/.claude/dev-workflow.json"
 assert_exit 0 sh "$PF" validate "$r/.claude/dev-workflow.json"
 assert_exit 0 test "$(jq -r .pluginVersion "$r/.claude/dev-workflow.json")" = "$VERSION"
 assert_exit 0 test "$(jq -r .schemaVersion "$r/.claude/dev-workflow.json")" = 1
+assert_exit 0 test "$(jq -r .versionFile "$r/.claude/dev-workflow.json")" = package.json
 assert_exit 0 test "$(jq -r '.commands.formatCheckStaged[1].command' "$r/.claude/dev-workflow.json")" = "ruff format --check"
 env=$r/.githooks/dev-workflow.env
 assert_exit 0 test "$(env_value "$env" DW_FORMATTERS)" = "$(printf '*.ts|npx prettier --check\n*.py|ruff format --check')"
@@ -104,7 +113,8 @@ assert_contains "$pf_text" '
   "ciAllowlist": [
     ".github/workflows/release check.yml",
     ".github/workflows/it'"'"'s.yml"
-  ]
+  ],
+  "versionFile": "package.json"
 }'
 
 # A rerun with the same answers is byte-identical, and says so.

@@ -61,6 +61,17 @@ while IFS= read -r line; do
   case $remote_ref in
     refs/notes/*) continue ;;
   esac
+  # A tag on a commit already in the remote's default branch, such as a version tagged
+  # after its pull request merged: that commit was checked before it got there.
+  case $remote_ref in
+    refs/tags/*)
+      commit=$(git rev-parse -q --verify "$local_sha^{commit}")
+      merged=$(git rev-parse -q --verify "refs/remotes/$1/$DW_DEFAULT_BRANCH^{commit}")
+      if [ -n "$commit" ] && [ -n "$merged" ] && git merge-base --is-ancestor "$commit" "$merged"; then
+        continue
+      fi
+      ;;
+  esac
   publishes=1
 
   # The check runs on the checkout, so anything else would go out unchecked. An annotated

@@ -12,7 +12,7 @@ Say "Using setup to ..." first. The scripts in `${CLAUDE_PLUGIN_ROOT}/scripts/se
 
 ## 1. Detect
 
-Run `sh ${CLAUDE_PLUGIN_ROOT}/scripts/setup/detect.sh .` from the repo. It prints JSON: whether the repo is empty, its remote and default branch, stack hints and other languages, any hook tool already there (husky, lefthook, pre-commit, simple-git-hooks), the hooks path git uses and where it's set (`hooksPath`, `hooksPathScope`), the executable hooks in `.git/hooks` (`gitHooks`), the state of `AGENTS.md` and `CLAUDE.md`, the old rule blocks found in them, and whether there's a project file.
+Run `sh ${CLAUDE_PLUGIN_ROOT}/scripts/setup/detect.sh .` from the repo. It prints JSON: whether the repo is empty, its remote and default branch, stack hints and other languages, any hook tool already there (husky, lefthook, pre-commit, simple-git-hooks), the hooks path git uses and where it's set (`hooksPath`, `hooksPathScope`), the executable hooks in `.git/hooks` (`gitHooks`), the state of `AGENTS.md` and `CLAUDE.md`, the old rule blocks found in them, whether there's a project file, and the files at the root that can hold a version (`versionFiles`).
 
 Read what you need to answer the questions yourself: `package.json` scripts, `pyproject.toml`, a `Makefile`, the CI workflows, an existing `.claude/dev-workflow.json`. An answer you can read is one you don't have to ask.
 
@@ -33,8 +33,9 @@ One question at a time, each with your recommendation first and why. Skip any wh
 3. **Screens:** whether people use screens in it.
 4. **A database,** with or without row-level security, and its reset commands, if any.
 5. **The default branch,** only when there's no remote to read it from.
-6. **Per-PR workflows:** if `sh ${CLAUDE_PLUGIN_ROOT}/scripts/setup/project-file.sh existing-ci .` lists any, ask which stay, for `ciAllowlist`. Recommend none: CI runs only for releases.
-7. **Approvals,** each its own question:
+6. **The version file:** where the project keeps its version, for `versionFile`. Every version is tagged with the bare version, like `1.4.0`, and this is the file `land` reads it from after a merge. Recommend the one of `versionFiles` the project's releases are for, once you've read that it holds a version. If none does, recommend adding one, starting at `0.1.0`, or say that without one versions aren't tagged. Skip this when `release-please-config.json` exists: release-please tags versions there.
+7. **Per-PR workflows:** if `sh ${CLAUDE_PLUGIN_ROOT}/scripts/setup/project-file.sh existing-ci .` lists any, ask which stay, for `ciAllowlist`. Recommend none: CI runs only for releases.
+8. **Approvals,** each its own question:
    - `mergePermission`: let the agent merge its own green pull requests in auto mode. Recommend yes.
    - `githubSettings`: only with a GitHub remote. Squash merges only, the pull request's title as the subject, a blank message, merged branches deleted. Recommend yes. It changes that repo's settings, so name the repo.
    - `installPlugins`: only if plugins are missing. Name them.

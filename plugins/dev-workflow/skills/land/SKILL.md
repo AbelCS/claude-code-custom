@@ -62,8 +62,9 @@ If a merge is blocked, stop and ask, and never work around it: no other merge me
 - `git switch <default>` and `git pull --ff-only`.
 - Delete the local branch. A squash merge looks unmerged to `git branch -d`, so first confirm `gh pr view <n> --json state` says `MERGED`, then `git branch -D <branch>`.
 - `git fetch --prune`.
+- Tag the version: `sh ${CLAUDE_PLUGIN_ROOT}/scripts/land/tag-version.sh .`. Every version is a tag holding the bare version, like `1.4.0`, on the commit that set it in the project's `versionFile`. `tagged` means this merge raised the version, and the tag is now on GitHub. `done` is what most merges find: that version was already tagged. A `skip` line says why nothing is tagged here: pass it on. If it fails, say what it printed, and never move or delete a tag to make it pass.
 - Confirm the issue closed with `gh issue view <issue> --json state`. If it's still open and its criteria are met, close it with a comment saying which pull request met them.
 
 ## 8. Report
 
-Use `verification-before-completion` before claiming anything. Lead with the outcome: what landed, as the squash commit on the default branch, and what was verified: verify, each review and its findings, the screen check, the security review. Say what was skipped or failed, and why.
+Use `verification-before-completion` before claiming anything. Lead with the outcome: what landed, as the squash commit on the default branch, any version tagged, and what was verified: verify, each review and its findings, the screen check, the security review. Say what was skipped or failed, and why.

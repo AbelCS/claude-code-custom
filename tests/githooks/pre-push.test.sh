@@ -547,6 +547,43 @@ git -C "$worktree" commit -q --allow-empty -m 'chore: a commit'
 # Git won't switch to a branch that another worktree has, so the message offers that too.
 refuses 'git switch wt-branch, or push from the worktree that has it' wt-branch
 
+# --- Real pushes: version tags on what's already merged
+
+# A commit in the remote's default branch was checked before it merged, so a tag on it,
+# such as a version added later, goes out without the check, whatever is checked out.
+new_fixture
+new_commit
+pushes main
+git -C "$repo" switch -q -c feat/2-y
+new_commit
+new_commit
+git -C "$repo" tag -a 1.0.0 -m 1.0.0 'main~1'
+git -C "$repo" tag 1.1.0 main
+forget_runs
+pushes 1.0.0
+pushes 1.1.0
+check_did_not_run
+assert_exit 0 test "$(remote_sha refs/tags/1.0.0)" = "$(sha_of 1.0.0)"
+
+# Several at once, as from --tags, the same.
+git -C "$repo" tag -a 0.9.0 -m 0.9.0 'main~1'
+git -C "$repo" tag 0.9.1 main
+pushes 0.9.0 0.9.1
+check_did_not_run
+
+# A merged tag doesn't let anything else out unchecked: a branch with it still runs it.
+pushes 'feat/2-y' 1.0.0
+check_ran
+
+# A tag on a commit that isn't merged keeps the rule: it must be what's checked out.
+git -C "$repo" tag 2.0.0-rc.1 'HEAD~1'
+refuses 'git switch --detach' 2.0.0-rc.1
+
+# Pushed to a URL, there's no remote branch to look in, so the rule holds too.
+git -C "$repo" tag 0.8.0 main
+assert_exit 1 git -C "$repo" push -q "$remote" 0.8.0
+assert_exit 1 test -n "$(remote_sha refs/tags/0.8.0)"
+
 # --- The env file: nothing here can run without knowing the rules
 
 new_fixture

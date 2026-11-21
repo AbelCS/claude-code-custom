@@ -112,6 +112,20 @@
         "x-error": "has to be a workflow's path, such as .github/workflows/release.yml"
       }
     },
+    "versionFile": {
+      "description": "The file that holds the project's version, by path from the repo's root, such as package.json. After a merge, land tags the commit that set each version with the bare version, like 1.4.0, unless release-please does. Missing means versions aren't tagged.",
+      "type": "string",
+      "allOf": [
+        {
+          "pattern": "^[^/\\n][^\\n]*[^/\\n]$|^[^/\\n]$",
+          "x-error": "has to be a file's path from the repo's root, such as package.json"
+        },
+        {
+          "not": { "pattern": "(^|/)\\.\\.(/|$)" },
+          "x-error": "has to stay inside the repo: no .. in the path"
+        }
+      ]
+    },
     "managed": {
       "description": "The ledger: a fingerprint of each thing setup wrote, by path, so a rerun can tell what the project edited. Setup keeps it.",
       "type": "object",
