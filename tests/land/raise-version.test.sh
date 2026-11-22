@@ -139,6 +139,105 @@ assert_exit 0 run 'chore: add a version (#8)'
 assert_contains "$(run 'feat: add a version (#8)')" 'skip first-version: 0.1.0'
 assert_exit 0 test "$(git -C "$repo" rev-list --count origin/main..HEAD)" = 1
 
+# --- The readiness gate at 1.0.0
+
+# gate_fixture <old> <new>: origin holds old, and the branch raised it by hand to new.
+gate_fixture() {
+  new_fixture VERSION "$1"
+  printf '%s\n' "$2" >"$repo/VERSION"
+  git -C "$repo" commit -q -am "chore: release $2 (#7)"
+}
+readiness() { # <text of docs/readiness.md>: committed on the branch.
+  mkdir -p "$repo/docs"
+  printf '%s\n' "$1" >"$repo/docs/readiness.md"
+  git -C "$repo" add docs/readiness.md
+  git -C "$repo" commit -q -m 'docs: readiness (#7)'
+}
+
+# Crossing to 1.0.0 or above needs that version's readiness entry.
+gate_fixture 0.9.4 1.0.0
+assert_exit 1 run 'feat: go stable (#7)'
+assert_contains "$(run 'feat: go stable (#7)' 2>&1)" 'readiness'
+readiness '# Readiness
+
+## 0.9.0, 2026-10-01
+
+## 1.0.1, 2026-11-22'
+assert_exit 1 run 'feat: go stable (#7)'
+readiness '# Readiness
+
+## 1.0.0, 2026-11-22
+
+| Item | Outcome | Why |
+|---|---|---|'
+assert_contains "$(run 'feat: go stable (#7)')" 'skip already-raised: 1.0.0'
+
+gate_fixture 0.12.0 2.0.0
+assert_exit 1 run 'feat!: go stable (#7)'
+
+# An entry only on disk, not committed, isn't in the merge, so it doesn't count.
+gate_fixture 0.9.4 1.0.0
+mkdir -p "$repo/docs"
+printf '## 1.0.0, 2026-11-22\n' >"$repo/docs/readiness.md"
+assert_exit 1 run 'feat: go stable (#7)'
+
+# A heading that only starts with the version isn't its entry.
+gate_fixture 0.9.4 1.0.0
+readiness '## 1.0.0-rc.1, 2026-11-20'
+assert_exit 1 run 'feat: go stable (#7)'
+
+# A release candidate comes before 1.0.0, in SemVer's order: the candidate isn't gated,
+# and the step from it to 1.0.0 is.
+gate_fixture 0.9.4 1.0.0-rc.1
+assert_contains "$(run 'feat: a candidate (#7)')" 'skip already-raised: 1.0.0-rc.1'
+gate_fixture 1.0.0-rc.2 1.0.0
+assert_exit 1 run 'feat: go stable (#7)'
+readiness '## 1.0.0, 2026-11-22'
+assert_contains "$(run 'feat: go stable (#7)')" 'skip already-raised: 1.0.0'
+# Later candidates of later majors are past the gate.
+gate_fixture 2.0.0-rc.1 2.0.0
+assert_contains "$(run 'feat: a new major (#7)')" 'skip already-raised: 2.0.0'
+
+# Build metadata isn't a pre-release: 1.0.0+build-42 is stable, so it's gated.
+gate_fixture 0.9.4 1.0.0+build-42
+assert_exit 1 run 'feat: go stable (#7)'
+readiness '## 1.0.0+build-42, 2026-11-22'
+assert_contains "$(run 'feat: go stable (#7)')" 'skip already-raised: 1.0.0+build-42'
+gate_fixture 1.0.0-rc.1 1.0.0+build-42
+assert_exit 1 run 'feat: go stable (#7)'
+
+# One candidate to the next is raised by hand like any version.
+gate_fixture 1.0.0-rc.1 1.0.0-rc.2
+assert_contains "$(run 'feat: another candidate (#7)')" 'skip already-raised: 1.0.0-rc.2'
+
+# A version file moved in this pull request: the old version is read where origin's
+# project file says it is, so the move doesn't pass for a first version.
+new_fixture VERSION 0.9.4
+mkdir -p "$repo/app"
+git -C "$repo" mv VERSION app/VERSION
+printf '1.0.0\n' >"$repo/app/VERSION"
+jq '.versionFile = "app/VERSION"' "$repo/.claude/dev-workflow.json" >"$base/pf.json"
+cp "$base/pf.json" "$repo/.claude/dev-workflow.json"
+git -C "$repo" commit -q -am 'chore: move the version (#7)'
+assert_exit 1 run 'feat: go stable (#7)'
+assert_contains "$(run 'feat: go stable (#7)' 2>&1)" 'readiness'
+
+# With release-please, a release pull request crossing 1.0.0 is gated before the skip.
+gate_fixture 0.9.4 1.0.0
+printf '{}\n' >"$repo/release-please-config.json"
+git -C "$repo" add release-please-config.json
+git -C "$repo" commit -q -m 'chore: release-please (#7)'
+assert_exit 1 run 'chore(main): release 1.0.0'
+readiness '## 1.0.0, 2026-11-22'
+assert_contains "$(run 'chore(main): release 1.0.0')" 'skip release-please'
+
+# Raises that don't cross 1.0.0 aren't gated.
+gate_fixture 1.2.3 2.0.0
+assert_contains "$(run 'feat!: a new API (#7)')" 'skip already-raised: 2.0.0'
+gate_fixture 0.4.0 0.9.0
+assert_contains "$(run 'feat: more (#7)')" 'skip already-raised: 0.9.0'
+raises 1.9.9 'feat!: a new API (#7)' 2.0.0
+
 # --- Skipped, saying why# --- Skipped, saying why
 
 new_fixture package.json '{ "version": "1.2.3" }'

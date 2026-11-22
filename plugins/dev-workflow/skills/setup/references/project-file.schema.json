@@ -112,6 +112,23 @@
         "x-error": "has to be a workflow's path, such as .github/workflows/release.yml"
       }
     },
+    "secretsAllowlist": {
+      "description": "Paths the pre-commit hook's secrets check skips, as shell case patterns from the repo's root, where * also matches /, such as tests/fixtures/*. For files that look like a secret and aren't, such as a test key.",
+      "type": "array",
+      "items": {
+        "type": "string",
+        "allOf": [
+          {
+            "pattern": "^[^\\n]+$",
+            "x-error": "has to be a glob on one line, such as tests/fixtures/*"
+          },
+          {
+            "not": { "pattern": "[{}]" },
+            "x-error": "has braces, which the hook's case pattern doesn't expand: write one glob per pattern, such as *.pem and *.key"
+          }
+        ]
+      }
+    },
     "versionFile": {
       "description": "The file that holds the project's version, by path from the repo's root, such as package.json. After a merge, land tags the commit that set each version with the bare version, like 1.4.0, unless release-please does. Missing means versions aren't tagged.",
       "type": "string",

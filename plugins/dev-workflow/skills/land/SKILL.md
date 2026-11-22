@@ -17,15 +17,19 @@ Read the issue with `gh issue view <issue>`. Check its acceptance criteria again
 
 ## 2. Verify
 
+First, the project's stage: `sh "${CLAUDE_PLUGIN_ROOT}/scripts/land/stage.sh" .` prints `early <version>` before 1.0.0, or `stable <version>`, or `stable unknown` when there's no version to read. Stable means the stricter checks below.
+
 Run the `verify` command as its own command, with nothing before or after it, and read the result. If the project has no `verify`, run `check` and say that `verify` isn't configured.
 
 Never chain a merge after it, or after any test command: the hooks block that, and the merge must come after reading the result. If it fails, find the cause with `systematic-debugging`. A flaky test is a bug until proven otherwise.
+
+**Stable:** then run `commands.audit`, also as its own command, and read its output: a known critical or high vulnerability fails this step, whatever its exit code says. Without an audit command, say so in the report.
 
 ## 3. Reviews
 
 - **Larger changes** get `/dev-workflow:independent-review`. Larger means more than `${user_config.review_threshold_lines}` changed lines (`git diff --shortstat origin/<default>...HEAD`), or any change to permissions, sign-in, money rules or public surfaces. Judgment can ask for one on a smaller change too.
 - **Screens:** `/dev-workflow:screen-check` if anything people see changed.
-- **Security:** `/security-review` if permissions, sign-in or anything public changed.
+- **Security:** `/security-review` if permissions, sign-in or anything public changed. **Stable:** on every larger change too.
 
 Fix what they find, test first, and run verify again, on its own.
 
@@ -49,7 +53,7 @@ Green means verify passed, every review finding was dealt with, and any checks o
 
 **Raise the version** just before merging, so the squash commit holds the code and its version together:
 
-1. `git fetch origin <default>`. If `git merge-base --is-ancestor origin/<default> HEAD` fails, the default branch has moved on: `git merge --no-edit origin/<default>` (a merge, so nothing pushed is rewritten). Resolve any conflict as in any merge, keeping origin's version on the version line, and run verify again on its own.
+1. `git fetch origin <default>`. If `git merge-base --is-ancestor origin/<default> HEAD` fails, the default branch has moved on: `git merge --no-edit origin/<default>` (a merge, so nothing pushed is rewritten). Resolve any conflict as in any merge, keeping origin's version on the version line, and run verify again on its own. Run `stage.sh` again too: if the project became stable meanwhile, do the stable checks in step 2 and 3 before going on.
 2. `sh "${CLAUDE_PLUGIN_ROOT}/scripts/land/raise-version.sh" . "<title>"`, with the pull request's title. It works out the bump from the title's type, as release-please does: `feat` the minor, `fix` and `perf` the patch, a `!` before the colon the major, one step lower before 1.0.0, and other types nothing.
    - `raised <old> <new>`: it committed the new version on this branch.
    - `unchanged` or `skip`: it changed nothing. Pass on what it says.

@@ -19,7 +19,7 @@ flowchart TD
     C -.->|significant or multi-step work| S["Spec, decision-log line, plan"]
     G -.->|larger pull request| R["Independent review"]
     G -.->|people see something different| SC["Screen check"]
-    G -.->|permissions, sign-in, public| SEC["Security review"]
+    G -.->|permissions, sign-in, public; any larger change from 1.0.0| SEC["Security review"]
     G -.->|unapproved change to what people see or do, money, permissions| AP["Your approval"]
 ```
 
@@ -31,7 +31,7 @@ Solid arrows are the spine. Dashed arrows are optional steps that join in when t
 | 2 | Branch | Name the branch after the issue |
 | 3 | Think | Decide before building. Big decisions get a spec, big jobs a plan |
 | 4 | Build | Write the test first, then the code, to the project's conventions |
-| 5 | Commit | Git checks formatting and the commit message |
+| 5 | Commit | Git refuses secrets, and checks formatting and the commit message |
 | 6 | Push | Git runs `check` and keeps you off the default branch |
 | 7 | Land | Verify, review, open the pull request, raise the version if needed, merge it when green |
 | 8 | Merged | The repo is tidied, the new version is tagged, and you hear what landed |
@@ -101,7 +101,7 @@ Its `finishing-a-development-branch` is replaced by `/dev-workflow:land`, which 
 
 **What happens underneath.** Git runs two hooks, copied into `.githooks/` by setup:
 
-- `pre-commit` runs the project's staged-file formatting checks (`formatCheckStaged`), which only check and never rewrite. It also blocks a staged workflow that gains a `push`, `pull_request` or `pull_request_target` trigger, unless the file is in `ciAllowlist`. If a file has unstaged changes, it can't be checked: "has unstaged changes, so what's staged can't be checked".
+- `pre-commit` first refuses a staged secret, at any stage of the project: a committed secret stays in the history for good. It looks at the staged file names, for `.env` and `.env.*` files other than `.env.example`, `.env.sample` and `.env.template`, and for key and certificate files such as `*.pem` and `*.key`. It looks at the added lines for a private key block and for the known shapes of cloud, GitHub, Slack, Stripe, Google, Anthropic and OpenAI keys and tokens. It names the file and the kind, never the value. A file that only looks like a secret, such as a test fixture, goes in `secretsAllowlist` in the project file: paths, not patterns, so no kind is ever switched off. It then runs the project's staged-file formatting checks (`formatCheckStaged`), which only check and never rewrite. It also blocks a staged workflow that gains a `push`, `pull_request` or `pull_request_target` trigger, unless the file is in `ciAllowlist`. If a file has unstaged changes, it can't be checked: "has unstaged changes, so what's staged can't be checked".
 - `commit-msg` requires a Conventional Commit subject, ending with `(#<issue>)` on a `<type>/<issue>-<slug>` branch, and rejects AI attribution. `fixup!` and `squash!` subjects pass during work.
 
 If it stops, the commit doesn't happen, and the message says why:
@@ -143,15 +143,15 @@ With no `check` command configured, it fails visibly instead of passing silently
 **What happens underneath.** `/dev-workflow:land` goes through these parts in order:
 
 1. **Acceptance criteria.** Reads the issue and checks each criterion against the work, not against memory.
-2. **Verify.** Runs `verify` as its own command and reads the result. With no `verify`, it runs `check` and says so. A failure goes to `systematic-debugging`.
-3. **Reviews, as needed.** `/dev-workflow:independent-review` for a larger change, `/dev-workflow:screen-check` if anything people see changed, `/security-review` for permissions, sign-in or anything public. Findings are fixed test-first and `verify` runs again.
+2. **Verify.** First it reads the project's stage with `scripts/land/stage.sh`: `early` before 1.0.0, `stable` from it, and `stable` too when there's no version to read, since it can't tell. Then it runs `verify` as its own command and reads the result. With no `verify`, it runs `check` and says so. A failure goes to `systematic-debugging`. When stable, it then runs the project's `audit` command as its own command and reads the output: a known critical or high vulnerability stops the landing, whatever the exit code says. Without an `audit` command, it says so in the report.
+3. **Reviews, as needed.** `/dev-workflow:independent-review` for a larger change, `/dev-workflow:screen-check` if anything people see changed, `/security-review` for permissions, sign-in or anything public, and when stable for every larger change too. Findings are fixed test-first and `verify` runs again.
 4. **Docs.** `AGENTS.md` and the decision log are current in this pull request, and so are a README and docs if the project has them.
 5. **Pull request.** Pushes (step 6 runs again), then `gh pr create` with a Conventional Commit title ending in the issue number, a body saying what changed and what was verified, then `Closes #<issue>`.
 6. **Raise the version.** Once everything is green, and only in a project with a `versionFile` and no release-please (see [Versions and releases](#versions-and-releases)). It runs the plugin's `scripts/land/raise-version.sh` with the pull request's title, and says one of four things:
    - `raised <old> <new>`: the new version is written into `versionFile` and committed on the branch as `chore: release <new> (#<issue>)`. `land` pushes it, and `pre-push` runs `check` on it.
    - `unchanged <type>`: the type, such as `docs` or `chore`, changes no version.
    - `skip`: it says why, such as release-please, no `versionFile`, a pre-release version, or a version you already raised by hand in this pull request.
-   - A failure, reported and never worked around, such as a title that isn't a Conventional Commit.
+   - A failure, reported and never worked around, such as a title that isn't a Conventional Commit, or a version raised by hand from below 1.0.0 to 1.0.0 or above with no entry for it in `docs/readiness.md`. `land` passes on the message, which says to run `/dev-workflow:readiness`, and never writes an entry to get past it.
 
    The bump comes from the title's type, as release-please's does: `feat` raises the minor, `fix` and `perf` the patch, a `!` before the colon the major, and other types nothing. Before 1.0.0 each step is one lower: a breaking change raises the minor, a feature the patch. The old version is the one on origin's default branch. If the default branch has moved on, `land` merges it into the branch first (a merge, so nothing pushed is rewritten), runs `verify` again, and raises the version again, so two pull requests can't claim the same number.
 7. **Merge when green.** Then, as its own command: `gh pr merge <n> --squash --match-head-commit <head> --subject "<title>" --body "" --delete-branch`, where `<head>` is the commit that was checked, so a different head stops the merge.
@@ -192,7 +192,7 @@ Same spine, different extras. Each row says what changes.
 | **A project with a database** | `/dev-workflow:conventions-code`'s data rules. Migrations only. A hook that asks before a database reset. | See below. |
 | **A larger pull request** | `/dev-workflow:independent-review` by another model, before the merge. | See below. |
 | **A change that alters what people see or do, money rules or permissions, and you haven't approved it** | `land` asks you first. | The one case where `land` doesn't merge on its own. Everything else lands without a question. |
-| **A project reaching 1.0.0** | A README and docs, kept current in every pull request after. | `land` says so if a project at 1.0.0 or later has none. `enable-releases` says to stop before a release that reaches 1.0.0 if they're missing or out of date. |
+| **A project going stable, reaching 1.0.0** | `/dev-workflow:readiness` first: a review of the whole app's security, dependencies, secrets in the history and docs, and data, monitoring, accessibility and performance where they apply, with its entry in `docs/readiness.md`. Then a README and docs, kept current in every pull request after. | `land` refuses to raise the version from below 1.0.0 to 1.0.0 or above without that entry, and says so if a project at 1.0.0 or later has no README. From 1.0.0, `land` also runs the dependency audit after `verify` and a security review of every larger pull request. `enable-releases` says to stop before a release that reaches 1.0.0 without the entry. See [The readiness review](#the-readiness-review). |
 | **A change that isn't a feature or a fix**, such as `docs`, `chore`, `test` or `refactor` | Nothing extra. | `land` raises no version (`unchanged`), so the merge adds no tag. A `feat`, a `fix`, a `perf` or a `!` does. |
 | **A flaky test** | Finding the root cause. | No rerun or retry first. A rerun is fine only for a proven environmental cause, such as the laptop sleeping, and you say so. |
 
@@ -236,6 +236,16 @@ In the repo's Actions settings, "Allow GitHub Actions to create and approve pull
 
 **The optional release check** runs the project's `check` on release-please's pull requests only, and goes in `ciAllowlist`. It wants a token secret of its own, such as `RELEASE_PLEASE_TOKEN`. With the default `GITHUB_TOKEN`, the check's runs on each release pull request wait for someone with write access to approve them. A token of its own lets them run unattended. Without the check, the release workflow can use `GITHUB_TOKEN`. The skill recommends leaving the check out.
 
+### The readiness review
+
+Security and other non-functional work grow with the version. A few basics hold from the first commit, such as the secrets check in `pre-commit`. Before 1.0.0 a project can favour speed. Its first stable version is the one people rely on, so it passes a review first. Ask for 1.0.0, to go stable or live, and `/dev-workflow:readiness` comes in, on a branch of its own with an issue.
+
+- **The checklist.** A security review of the whole codebase (`/security-review`, then an independent review briefed on the files that handle sign-in, permissions, money, personal data, uploads and anything public), the dependency audit, a secrets scan of the whole history with a real scanner, permissions, and README and docs. Where they apply: data (backups, a restore that was tried, a retention rule for personal data), monitoring, accessibility of the main flows, performance, and releases.
+- **Each item ends** as done, not applicable or accepted, each with a reason. Only you accept a risk, asked one question at a time, recommendation first. A finding becomes an issue, and the item stays open until the issue is closed or you accept it. A missing tool, such as no `audit` command or no scanner, is said plainly, and the item stays open until it runs or you accept it.
+- **The entry.** Once every item is closed, the skill adds a section headed `## <version>, <date>` to `docs/readiness.md`, with a table of items, outcomes and reasons. It checks it with `scripts/readiness/check-entry.sh`, then changes `versionFile` by hand to the version, and lands that with `/dev-workflow:land`.
+- **The gate.** `raise-version.sh` sees a version raised by hand and looks for the entry. A 0.x or a 1.0.0 candidate such as `1.0.0-rc.1` to 1.0.0 or above needs it, and any jump is covered, such as 0.9.2 to 2.0.0. Raises within 1.x and below 1.0.0 aren't gated, and neither is a first version file. The gate trusts the entry: it checks that the heading exists, not that the review was honest.
+- **From then on** the project is `stable` to `land`: the dependency audit after `verify`, and a security review of every larger pull request.
+
 ### Maintenance
 
 `/dev-workflow:maintain` is started only by you, never on a schedule. It starts from a clean, updated default branch and sweeps six areas, each with its own issue and pull request if it changes files:
@@ -273,7 +283,7 @@ Two things can stop an action, and they need different responses.
 | **What it is** | The action is refused, with a message saying why and what to do instead | The action waits for a person to approve it |
 | **Where it comes from** | Git hooks, and Claude Code hooks | Claude Code hooks only |
 | **What to do** | Do what the message says: fix the cause, or use the allowed way. Don't work around it | Read what it will do, then approve or refuse |
-| **Examples** | `--no-verify`; a merge chained after tests; a local merge into the default branch; a bad commit message, pull request title or body; AI attribution; a failing `check`; a direct push to the default branch | A database reset command; a workflow gaining a per-PR trigger |
+| **Examples** | `--no-verify`; a merge chained after tests; a local merge into the default branch; a bad commit message, pull request title or body; AI attribution; a failing `check`; a direct push to the default branch; a staged secret | A database reset command; a workflow gaining a per-PR trigger |
 
 What you'll see, in the hooks' own words:
 
@@ -283,6 +293,14 @@ dev-workflow: this is a local merge into main. Merge through a pull request inst
 dev-workflow: a pull request body needs a closing keyword for its issue, like "Closes #12".
 dev-workflow: this looks like a database reset, which destroys data, so it needs a person's yes.
 ```
+
+A staged secret is a block from the git hook. It names the file and the kind, never the value:
+
+```text
+pre-commit: <file> looks like it holds a GitHub token: take it out of the commit, and revoke it if it was ever shared. If it isn't one, add the path to secretsAllowlist in .claude/dev-workflow.json and run the setup skill
+```
+
+Take the secret out of the commit and put it where the project keeps secrets. Revoke it if it was ever shared, since the value may already be in a terminal or a log somewhere else. If the file only looks like a secret, such as a test fixture, add its path to `secretsAllowlist` and run `/dev-workflow:setup`, which writes it into the hook's settings. The same goes for a `.env` file, which `pre-commit` also refuses.
 
 For a request, the hook asks for a yes: a database reset, or a workflow that gets a trigger such as `pull_request`. Where there's no person to answer, such as in `claude -p`, a request acts as a denial. This was seen in real sessions. What auto mode does with one in an interactive session wasn't tested. See `docs/hook-behaviour.md`. To keep a per-PR workflow on purpose, list it in `ciAllowlist` through setup.
 
@@ -326,5 +344,8 @@ Subagents get the model from these settings. The main session's model is your ch
 | **`check`** | The project's fast command: format, lint, typecheck, unit tests. `pre-push` runs it |
 | **`versionFile`** | The file that holds the project's version, such as `package.json`. `land` raises the version in it before a merge, and reads it to tag the version |
 | **`verify`** | `check` plus the slower database and end-to-end tests. `land` runs it |
+| **`secretsAllowlist`** | Paths in the project file that `pre-commit`'s secrets check skips, as globs from the root such as `tests/fixtures/*`, for files that look like a secret and aren't |
+| **Stage** | Where a project is in its life, as `land` reads it from the version on the default branch: `early` before 1.0.0, in SemVer's order, and `stable` from 1.0.0 or when it can't tell. Stable means a security review of every larger pull request and the dependency audit |
+| **Readiness review** | What a project passes before its first stable version, run by `/dev-workflow:readiness`. Its result is an entry in `docs/readiness.md`, which `land` needs before it raises the version to 1.0.0 |
 | **Git hook** | A script git runs on commit and push. Setup copies them into `.githooks/`. They work for anyone who commits there |
 | **Claude Code hook** | A script that comes with the plugin and runs before Claude's commands and edits, and at session start |

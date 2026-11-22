@@ -1,6 +1,6 @@
 #!/bin/sh
-# Checks what this commit will hold: its formatting, and that no workflow gains a
-# per-PR CI trigger. Git runs it with no arguments from the top of the work tree, and
+# Checks what this commit will hold: no secrets, its formatting, and that no workflow
+# gains a per-PR CI trigger. Git runs it with no arguments from the top of the work tree, and
 # sets GIT_INDEX_FILE for `commit -a` and `commit <path>`, which makes those staged too.
 
 hook_dir=$(dirname "$0")
@@ -25,7 +25,7 @@ env_broken() {
 
 # A value from the caller's environment isn't the project's setting. Unset rather than
 # empty, so that a file that leaves a setting out doesn't read as having none.
-unset DW_FORMATTERS DW_CI_ALLOWLIST
+unset DW_FORMATTERS DW_CI_ALLOWLIST DW_SECRETS_ALLOW
 if dw_load_env; then
   if [ -z "${DW_FORMATTERS+set}" ] || [ -z "${DW_CI_ALLOWLIST+set}" ]; then
     env_broken
@@ -86,6 +86,71 @@ check_workflows() {
     done <<TRIGGERS
 $triggers
 TRIGGERS
+  done <<FILES
+$staged
+FILES
+}
+
+# The kinds of secret it knows, as "<kind>|<extended regular expression>": shapes that
+# are almost never anything else, so it rarely cries wolf. It isn't a full scanner.
+secret_patterns='private key|-----BEGIN ([A-Z0-9]+ )*PRIVATE KEY( BLOCK)?-----
+AWS access key|(^|[^0-9A-Z])(AKIA|ASIA)[0-9A-Z]{16}([^0-9A-Z]|$)
+GitHub token|gh[pousr]_[A-Za-z0-9]{36,}
+GitHub token|github_pat_[A-Za-z0-9_]{22,}
+Slack token|xox[baprs]-[0-9]+-[0-9A-Za-z-]+
+Stripe live key|[rs]k_live_[0-9A-Za-z]{16,}
+Google API key|AIza[0-9A-Za-z_-]{35}
+Anthropic key|sk-ant-[A-Za-z0-9_-]{20,}
+OpenAI key|sk-proj-[A-Za-z0-9_-]{20,}'
+
+# A secret committed stays in the history for good, so this holds from the first
+# commit. It names the file and the kind, never the value. A path in DW_SECRETS_ALLOW,
+# from secretsAllowlist, is the project saying it holds none, such as a test fixture.
+check_secrets() {
+  while IFS= read -r file; do
+    [ -n "$file" ] || continue
+    allowed=0
+    while IFS= read -r glob; do
+      [ -n "$glob" ] || continue
+      # shellcheck disable=SC2254 # The glob is meant as a pattern.
+      case $file in $glob) allowed=1 ;; esac
+    done <<ALLOWED
+${DW_SECRETS_ALLOW-}
+ALLOWED
+    [ "$allowed" -eq 0 ] || continue
+
+    # The path as a glob that matches only it, for the allowlist.
+    as_glob=$(printf '%s' "$file" | sed 's/[][*?\\]/\\&/g')
+
+    kind=
+    case ${file##*/} in
+      .env.example | .env.sample | .env.template) ;;
+      .env | .env.*) kind='secrets file' ;;
+      *.pem | *.key | *.p12 | *.pfx | id_rsa | id_dsa | id_ecdsa | id_ed25519) kind='key or certificate file' ;;
+    esac
+    if [ -n "$kind" ]; then
+      block "$file looks like a $kind, which doesn't belong in git: take it out of the commit. If it isn't one, add $as_glob to secretsAllowlist in .claude/dev-workflow.json and run the setup skill"
+      continue
+    fi
+
+    # Only what's added: removing a secret is what should happen. As text, whatever
+    # .gitattributes says about showing it, and only the hunks' lines, so content that
+    # starts with ++ isn't taken for the header.
+    if ! added=$(git diff --cached --text --no-textconv -U0 --no-color --no-ext-diff -- "$file"); then
+      block "could not read the staged changes to $file"
+      continue
+    fi
+    added=$(printf '%s\n' "$added" | awk 'hunk && /^\+/ { print substr($0, 2) } /^@@/ { hunk = 1 }')
+    [ -n "$added" ] || continue
+    while IFS= read -r pattern; do
+      [ -n "$pattern" ] || continue
+      if printf '%s\n' "$added" | grep -Eq -- "${pattern#*|}"; then
+        block "$file looks like it holds a ${pattern%%|*}: take it out of the commit, and revoke it if it was ever shared. If it isn't one, add $as_glob to secretsAllowlist in .claude/dev-workflow.json and run the setup skill"
+        break
+      fi
+    done <<PATTERNS
+$secret_patterns
+PATTERNS
   done <<FILES
 $staged
 FILES
@@ -155,6 +220,9 @@ case $staged in
     ;;
 esac
 
+check_secrets
+# Nothing else runs on a commit holding a secret: a formatter's error could print it.
+[ "$blocked" -eq 0 ] || exit 1
 check_workflows
 check_formatting
 

@@ -27,7 +27,16 @@ plan=$(sh "$ROOT/plugins/dev-workflow/scripts/setup/run.sh" --root "$ROOT" --pla
 {}
 ANSWERS
 ) || _assert_fail "setup's plan failed on this repo: $plan"
-assert_exit 0 test "$(printf '%s\n' "$plan" | jq -r .action | sort -u)" = keep
+# Except the project file's pluginVersion, which records the plugin that last ran setup
+# here: a release raises the plugin in its own merge, so it lags, as in any project, until
+# setup runs again. It's never ahead, and the file's other fields are checked below.
+assert_exit 0 test "$(printf '%s\n' "$plan" | jq -r 'select(.path != ".claude/dev-workflow.json") | .action' | sort -u)" = keep
+# shellcheck source=plugins/dev-workflow/scripts/lib/version.sh
+. "$ROOT/plugins/dev-workflow/scripts/lib/version.sh"
+read_version "$(jq -r .pluginVersion "$ROOT/.claude/dev-workflow.json")" || _assert_fail "pluginVersion isn't a version"
+recorded=$version_parts
+read_version "$(jq -r .version "$ROOT/plugins/dev-workflow/.claude-plugin/plugin.json")" || _assert_fail "plugin.json has no version"
+version_is_older "$version_parts" "$recorded" && _assert_fail "pluginVersion is ahead of the plugin"
 # Each rule once: the hand-written part doesn't repeat a managed heading.
 assert_exit 0 test "$(grep -c '^## Workflow$' "$ROOT/AGENTS.md")" = 1
 
@@ -85,5 +94,6 @@ DW_DEFAULT_BRANCH='main'
 DW_CHECK='scripts/check'
 DW_CI_ALLOWLIST=''
 DW_FORMATTERS=''
+DW_SECRETS_ALLOW=''
 ENV
 assert_file_same "$ROOT/.githooks/dev-workflow.env" "$expected_env"

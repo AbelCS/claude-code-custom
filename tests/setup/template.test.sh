@@ -115,6 +115,6 @@ for skill in land independent-review screen-check conventions-code conventions-u
 done
 # shellcheck disable=SC2016 # A literal pattern.
 if printf '%s\n' "$all" | grep -Eo '/dev-workflow:[a-z-]+' | sort -u |
-  grep -vxE '/dev-workflow:(land|independent-review|screen-check|conventions-code|conventions-ui|choose-stack|maintain|enable-releases|setup)' >/dev/null; then
+  grep -vxE '/dev-workflow:(land|independent-review|screen-check|conventions-code|conventions-ui|choose-stack|maintain|enable-releases|readiness|setup)' >/dev/null; then
   _assert_fail "templates name an unknown skill"
 fi
