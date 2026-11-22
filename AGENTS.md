@@ -69,7 +69,7 @@ What the managed sections below say, as it applies here:
 - Versions follow SemVer, through the `version` in each plugin's `plugin.json`, which is this repo's `versionFile`. `land` raises it and tags it like any project's. This repo publishes no GitHub Releases: plugin updates read `plugin.json` on `main`.
 - GitHub enforces the merge rules on the repo: squash-only merges, the pull request title as the subject, a blank message, and merged branches deleted. Set on 2026-11-06.
 - `tests/run.sh` runs test files all at once, so each one uses only its own temp folders.
-- The managed sections and `.githooks/` come from this repo's own plugin, through `/dev-workflow:setup`. A change to the rules or the git hooks goes in the plugin's templates, in `plugins/dev-workflow/skills/setup/templates/`, and setup runs here from the working copy in the same pull request: `tests/repo.test.sh` checks that its plan here changes nothing.
+- The managed sections and `.githooks/` come from this repo's own plugin, through `/dev-workflow:setup`. A change to the rules or the git hooks goes in the plugin's templates, in `plugins/dev-workflow/skills/setup/templates/`, and setup runs here from the working copy in the same pull request: `tests/repo.test.sh` checks that its plan here changes nothing, apart from the plugin version the project file records, which lags a release until setup runs again.
 
 <!-- dev-workflow:begin decisions -->
 
