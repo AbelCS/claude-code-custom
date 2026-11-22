@@ -61,7 +61,7 @@ A new skill, model-invocable. Its description starts with the trigger: the owner
 
 Each item ends as **done**, **not applicable** or **accepted**, each with a reason. Accepting a risk is the owner's call, asked one question at a time. A finding becomes an issue. Every such issue is closed or accepted before the entry is written. A missing tool, such as no `audit` command or no scanner, is said plainly: the item stays open until it runs or the owner accepts it.
 
-**The entry** goes to `docs/readiness.md`, created if missing, as a section headed exactly `## <version>, <YYYY-MM-DD>`, with a table of items, outcomes and reasons. Only a complete review writes the heading. A script writes it, `scripts/readiness/write-entry.sh`, and the heading's format lives in one library, `scripts/lib/readiness.sh`, which the gate reads too. So the writer and the gate can't disagree.
+**The entry** goes to `docs/readiness.md`, created if missing, as a section headed exactly `## <version>, <YYYY-MM-DD>`, with a table of items, outcomes and reasons. Only a complete review writes the heading. The skill writes it, then runs `scripts/readiness/check-entry.sh <root> <version>`, which reads it through `scripts/lib/readiness.sh`, the same library the gate uses. So the entry and the gate can't disagree: the format is read in one place.
 
 Then the skill sets the version in `versionFile` to 1.0.0 by hand, on the same branch, and lands it. `raise-version.sh` sees a version already raised, checks the gate, and leaves it. `tag-version.sh` tags it after the merge.
 
@@ -72,7 +72,7 @@ One new check, after both versions are read and before `skip already-raised`, si
 - **Order is SemVer's.** `1.0.0-rc.1` is below 1.0.0, so a release candidate isn't gated, and `1.0.0-rc.1` to `1.0.0` is.
 - **Any jump is covered:** 0.9.2 to 2.0.0 needs an entry for 2.0.0.
 - **`skip first-version` stays above it,** so a first version file passes.
-- **With release-please and a `versionFile`,** the check runs before `skip release-please`, so a release pull request that reaches 1.0.0 is gated too. The entry lands first, in an ordinary pull request.
+- **With release-please,** `raise-version.sh` skips before reading any version, so the gate isn't in it. `enable-releases` checks for the entry with `check-entry.sh` before a release reaches 1.0.0, as judgment in its skill.
 
 ### `land`
 

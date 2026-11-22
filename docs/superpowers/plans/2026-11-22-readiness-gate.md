@@ -27,10 +27,10 @@ Paths below are under `plugins/dev-workflow/` unless they start with `tests/`, `
   Files: `skills/setup/references/project-file.schema.json` (`secretsAllowlist`: strings with no line break and no braces), `scripts/setup/project-file.sh` (the answers it merges, and `DW_SECRETS_ALLOW` in the env it writes), `skills/setup/references/answers.md`, `skills/setup/SKILL.md` where it lists the fields.
   Tests: `tests/setup/project-file.test.sh` (the field is accepted, a bad glob refused, the env line written, empty when the field is missing), `tests/setup/install-hooks.test.sh` if it holds an expected env. In `secrets.test.sh`: an allowed path passes by name and by content, a glob covers a folder, `DW_SECRETS_ALLOW` from the caller's environment is ignored, an env file without the line reads as an empty list, and no env file still scans.
 
-- [ ] **3. `scripts/lib/readiness.sh` and `scripts/readiness/write-entry.sh`.**
-  Files: both new, `tests/readiness/entry.test.sh` (new; `tests/run.sh` must find the new folder).
-  The library holds the heading's format: one function prints `## <version>, <date>`, one says whether content on stdin has a heading for a version. The script takes the root, the version and a file of rows, creates `docs/readiness.md` if missing, and appends the section.
-  Tests: the first entry creates the file with its title. A second is appended and the first left byte for byte. A version that isn't bare SemVer is refused. A version already there is refused. `1.0.0` doesn't match a heading for `1.0.01` or `11.0.0`: the dots are literal. A heading without a date doesn't count.
+- [ ] **3. `scripts/lib/readiness.sh` and `scripts/readiness/check-entry.sh`.**
+  Files: both new, `tests/land/readiness-entry.test.sh` (new).
+  The library says whether content on stdin has the heading for a version, and whether a version is before 1.0.0 or stable, in SemVer's order. The skill writes the entry itself, then runs the check, which reads it through the library, as the gate does.
+  Tests: the entry for a version is found; another version's, a heading without a date or with text after it, a candidate's, and a version with other characters for the dots are not; a version that isn't bare SemVer is refused.
 
 - [ ] **4. `raise-version.sh`: the gate.**
   Files: `scripts/land/raise-version.sh` (sources `lib/readiness.sh`; the check sits after `old` is read and before `skip already-raised`; the header comment), `tests/land/raise-version.test.sh`.

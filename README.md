@@ -47,9 +47,9 @@ Say you want to add search. You type almost nothing special: you describe the wo
 1. **Issue.** Ask Claude to open one, with an objective, scope and acceptance criteria. The rules ask for it before any meaningful work.
 2. **Branch.** Claude creates `<type>/<issue>-<slug>`, like `feat/12-search`. The issue number comes back in every commit subject, and `commit-msg` reads it from the branch name.
 3. **Work.** Ask for the feature. Skills come in on their own: tests first, a failure debugged properly, code and screens built to the rules. You type nothing.
-4. **Commit.** Git runs `pre-commit`, which checks formatting of staged files and blocks a workflow gaining a per-PR trigger. Then `commit-msg` checks the subject, like `feat: add product search (#12)`, and rejects AI attribution.
+4. **Commit.** Git runs `pre-commit`, which refuses a staged secret, checks formatting of staged files and blocks a workflow gaining a per-PR trigger. Then `commit-msg` checks the subject, like `feat: add product search (#12)`, and rejects AI attribution.
 5. **Push.** `pre-push` runs the project's `check` command and refuses a direct push to the default branch. If `check` fails, the push doesn't happen.
-6. **Finish.** Say "land this", or just "this is done, merge it". `land` checks the acceptance criteria, runs `verify`, asks for an independent review of a larger change and a screen check if screens changed, opens the pull request, squash-merges it once green, updates your default branch, and tags the version. In a project with a version file and no release-please, it raises the version just before the merge when the title's type calls for it: `feat`, `fix`, `perf`, or a `!` for a breaking change. It asks first only for a change you haven't approved that alters what people see or do, money rules or permissions.
+6. **Finish.** Say "land this", or just "this is done, merge it". `land` checks the acceptance criteria, runs `verify`, asks for an independent review of a larger change, a screen check if screens changed and a security review if it touches permissions, sign-in or anything public, opens the pull request, squash-merges it once green, updates your default branch, and tags the version. In a project with a version file and no release-please, it raises the version just before the merge when the title's type calls for it: `feat`, `fix`, `perf`, or a `!` for a breaking change. From 1.0.0 it also runs the dependency audit after `verify`, and reviews the security of every larger change. It asks first only for a change you haven't approved that alters what people see or do, money rules or permissions.
 
 At the end, Claude says what landed and what was verified.
 
@@ -65,7 +65,7 @@ You can call any skill by name, such as `/dev-workflow:land`, at any time. You d
 
 ## What happens by itself
 
-Nine skills. Seven come in on their own when their trigger comes up. Two start only when you type them.
+Ten skills. Eight come in on their own when their trigger comes up. Two start only when you type them.
 
 **Comes in on its own** (you can also call it by name):
 
@@ -77,7 +77,8 @@ Nine skills. Seven come in on their own when their trigger comes up. Two start o
 | `/dev-workflow:conventions-ui` | Applies the design system, copy, theme, accessibility and touch rules | You build, change or word a screen, form, label or message |
 | `/dev-workflow:screen-check` | Checks every touched screen in a browser and fixes what it finds | Anything people see has changed |
 | `/dev-workflow:independent-review` | Gets a review by another model, with a narrow brief, and checks each finding against the code | A pull request is larger than `review_threshold_lines`, or you ask for an outside review |
-| `/dev-workflow:land` | Confirms the issue is met, runs `verify` and the reviews needed, opens the pull request, raises the version when the pull request's type calls for it (without release-please), squash-merges it when green, updates the default branch and tags the version | Work on a branch is finished and ready to merge |
+| `/dev-workflow:land` | Confirms the issue is met, runs `verify` and the reviews needed, opens the pull request, raises the version when the pull request's type calls for it (without release-please), squash-merges it when green, updates the default branch and tags the version. From 1.0.0 it also runs the dependency audit after `verify` and a security review of every larger pull request | Work on a branch is finished and ready to merge |
+| `/dev-workflow:readiness` | Runs the review a project passes before its first stable version: security of the whole app, dependencies, secrets in the history, docs, and data, monitoring, accessibility and performance where they apply. Findings become issues, and the result goes in `docs/readiness.md`, which `land` needs before it raises the version to 1.0.0 | You ask for 1.0.0, to go stable or live, or to deliver |
 
 **Only when you type it:**
 
@@ -99,7 +100,7 @@ Two layers check the rules. Both do nothing in a repo that hasn't run `/dev-work
 | Hook | When it runs | What it checks |
 |---|---|---|
 | `commit-msg` | Every commit | Conventional Commit format. The issue number in the subject, on a `<type>/<issue>-<slug>` branch. No AI attribution, along with the project's attribution settings |
-| `pre-commit` | Every commit | Staged files are formatted. No workflow gains a per-pull-request trigger |
+| `pre-commit` | Every commit | No staged secret: known key and token kinds, private keys, `.env` files other than `.env.example`, `.env.sample` and `.env.template`, and key and certificate files. It names the file and the kind, never the value, and skips paths listed in `secretsAllowlist` in the project file. Staged files are formatted. No workflow gains a per-pull-request trigger |
 | `pre-push` | Every push | Checks pass: it runs the project's `check` command. No direct push to the default branch. A tag on a commit already in the default branch goes through without the check, since that commit was checked before it merged |
 
 **Claude Code hooks** come with the plugin. They apply only to Claude's own commands and edits.
@@ -167,6 +168,11 @@ The first and third are commands inside Claude Code. The second runs in your ter
 
 ### Upgrade notes
 
+- 1.4.0: security checks now grow with the version.
+  - Always on: `pre-commit` refuses to commit a secret. It knows the usual kinds of key and token, private keys, `.env` files other than `.env.example`, `.env.sample` and `.env.template`, and key and certificate files. It names the file and the kind, never the value. It isn't a full scanner, so it misses a password with no known shape. A file that only looks like a secret, such as a test fixture, goes in `secretsAllowlist` in `.claude/dev-workflow.json`: a list of paths, with `*` matching across folders.
+  - Before 1.0.0: the new `/dev-workflow:readiness` runs the review a project passes before its first stable version, and writes the result to `docs/readiness.md`. `land` won't raise the version from below 1.0.0, a 0.x or a 1.0.0 candidate, to 1.0.0 or above without that file's entry for the version. A project that adopts the plugin already past 1.0.0 isn't asked for one. With release-please, nothing in `land` stops it, so `/dev-workflow:enable-releases` checks for the entry before a release that reaches 1.0.0.
+  - From 1.0.0: `land` also runs the project's `audit` command after `verify`, and a known critical or high vulnerability stops the merge. Every larger pull request gets `/security-review`, not only those touching permissions, sign-in or anything public. `land` reads the stage from the version on the default branch, and applies these when it can't tell.
+  - To upgrade: run the usual update steps above, then run `/dev-workflow:setup` in each project. Setup brings the new rules text and the new `pre-commit` in.
 - 1.3.0: without release-please, `/dev-workflow:land` now raises the version for you. Just before each merge, in a project with a version file, it reads the pull request title's Conventional Commit type: `feat` raises the minor, `fix` and `perf` the patch, a `!` before the colon the major, and other types nothing. Before 1.0.0 each step is one lower: a breaking change raises the minor, a feature the patch. It writes the new version into the version file as one commit on the branch, `chore: release <new> (#<issue>)`, so the squash commit holds the code and its version together, and tags it after the merge. If the default branch moved on, `land` merges it into the branch first, so two pull requests can't claim the same number.
   - A pre-release version, such as `2.0.0-rc.1`, is left alone, and so is a version you already raised by hand in the pull request. The new rules text no longer asks you to raise the version yourself.
   - With release-please nothing changes: it batches merges into a release when you run it.
