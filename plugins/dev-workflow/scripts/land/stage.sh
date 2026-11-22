@@ -6,9 +6,10 @@
 #   stable <version>   1.0.0 or above
 #   stable unknown     no version to read: the stricter rules, since it can't tell
 #
-# The version is the one in versionFile on origin's default branch, fetched first, as
-# that's what the project has released. A version file this branch adds is read from the
-# branch, as origin has none yet. Exits 2 on bad usage or a folder that isn't a set-up
+# The version is the one in versionFile on origin's default branch, where origin's own
+# project file says it is, fetched first, as that's what the project has released. A
+# version file this branch adds is read from the branch, as origin has none yet. When
+# origin can't be reached, the stage is unknown. Exits 2 on bad usage or a folder that isn't a set-up
 # project.
 
 die() {
@@ -39,11 +40,15 @@ g() {
 file=$(jq -r '.versionFile // empty' "$project" 2>/dev/null)
 default=$(jq -r '.defaultBranch // "main"' "$project" 2>/dev/null)
 version=
-if [ -n "$file" ]; then
-  g -c fetch.prune=false -c fetch.pruneTags=false fetch -q --no-tags origin \
-    "+refs/heads/$default:refs/remotes/origin/$default" 2>/dev/null
-  if g cat-file -e "refs/remotes/origin/$default:$file" 2>/dev/null; then
-    version=$(g show "refs/remotes/origin/$default:$file" | version_parse "$file")
+# An old copy of origin can't vouch for the stage, so a failed fetch leaves it unknown.
+if [ -n "$file" ] && g -c fetch.prune=false -c fetch.pruneTags=false fetch -q --no-tags origin \
+  "+refs/heads/$default:refs/remotes/origin/$default" 2>/dev/null; then
+  base=refs/remotes/origin/$default
+  # Where origin's own project file says its version is: the file may move on a branch.
+  base_file=$(g show "$base:.claude/dev-workflow.json" 2>/dev/null | jq -r '.versionFile // empty | strings' 2>/dev/null)
+  [ -n "$base_file" ] || base_file=$file
+  if g cat-file -e "$base:$base_file" 2>/dev/null; then
+    version=$(g show "$base:$base_file" | version_parse "$base_file")
   elif [ -f "$root/$file" ]; then
     version=$(version_parse "$file" <"$root/$file")
   fi

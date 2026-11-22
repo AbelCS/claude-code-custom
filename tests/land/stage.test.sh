@@ -62,5 +62,20 @@ assert_exit 0 test "$(stage)" = 'stable unknown'
 fixture 'not a version'
 assert_exit 0 test "$(stage)" = 'stable unknown'
 
+# A version file moved on this branch: origin's own project file says where its version is.
+fixture 1.2.0
+mkdir -p "$repo/app"
+git -C "$repo" mv VERSION app/VERSION
+printf '0.1.0\n' >"$repo/app/VERSION"
+jq '.versionFile = "app/VERSION"' "$repo/.claude/dev-workflow.json" >"$base/pf"
+cp "$base/pf" "$repo/.claude/dev-workflow.json"
+git -C "$repo" commit -q -am 'chore: move it (#1)'
+assert_exit 0 test "$(stage)" = 'stable 1.2.0'
+
+# Origin out of reach: an old copy can't vouch for the stage.
+fixture 0.4.2
+git -C "$repo" remote set-url origin "$base/gone.git"
+assert_exit 0 test "$(stage)" = 'stable unknown'
+
 assert_exit 2 sh "$ST"
 assert_exit 2 sh "$ST" "$(tmp_dir)"

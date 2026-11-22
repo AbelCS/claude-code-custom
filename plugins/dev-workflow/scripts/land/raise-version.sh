@@ -70,13 +70,19 @@ parsed=$(printf '%s\n' "$title" | awk '
 type=${parsed% *}
 bang=${parsed#* }
 
-# As committed: a config left lying about uncommitted won't be in the merge.
+# As committed: a config left lying about uncommitted won't be in the merge. With it,
+# release-please raises the version, but a release crossing 1.0.0 is still gated below.
+release_please=
 if g cat-file -e "HEAD:release-please-config.json" 2>/dev/null; then
+  release_please=1
+fi
+skip_release_please() {
   echo 'skip release-please: it raises the version when a release is cut'
   exit 0
-fi
+}
 file=$(jq -r '.versionFile // empty' "$project") || die "cannot read $project"
 if [ -z "$file" ]; then
+  [ -z "$release_please" ] || skip_release_please
   echo 'skip no-version-file: the project file names no versionFile, so there is no version to raise'
   exit 0
 fi
@@ -95,31 +101,42 @@ current=$(version_parse "$file" <"$root/$file")
 printf '%s\n' "$current" | grep -Eqx "$version_semver" ||
   fail "$file holds \"$current\", which isn't a bare SemVer version such as 1.4.0"
 
+# The old version is where origin's own project file says it is, so moving the file in
+# this pull request doesn't pass for a first version.
+base_file=$(g show "$base:.claude/dev-workflow.json" 2>/dev/null | jq -r '.versionFile // empty | strings' 2>/dev/null)
+[ -n "$base_file" ] || base_file=$file
 # A version file this pull request adds: its version is the first, tagged after the merge.
-if ! g cat-file -e "$base:$file" 2>/dev/null; then
+if ! g cat-file -e "$base:$base_file" 2>/dev/null; then
+  [ -z "$release_please" ] || skip_release_please
   echo "skip first-version: $current is the first version in $file, and is tagged after the merge"
   exit 0
 fi
-old=$(g show "$base:$file" | version_parse "$file")
+old=$(g show "$base:$base_file" | version_parse "$base_file")
 printf '%s\n' "$old" | grep -Eqx "$version_semver" ||
-  fail "$file on origin/$default holds \"$old\", which isn't a bare SemVer version such as 1.4.0"
+  fail "$base_file on origin/$default holds \"$old\", which isn't a bare SemVer version such as 1.4.0"
+
+# Going stable is a deliberate step, and it passes the readiness review first: its
+# entry in docs/readiness.md, as committed on this branch. A candidate such as
+# 1.0.0-rc.1 still comes before 1.0.0, so it isn't gated, and the step from it is.
+if readiness_before_stable "$old" && readiness_is_stable "$current"; then
+  if ! g show "HEAD:docs/readiness.md" 2>/dev/null | readiness_has_entry "$current"; then
+    fail "$current is the first stable version, which needs its readiness review first: run /dev-workflow:readiness, which records it in docs/readiness.md"
+  fi
+fi
+[ -z "$release_please" ] || skip_release_please
 
 # Raised by hand already: kept, as long as it's higher. A pre-release of the same numbers
 # comes before the release itself.
 if [ "$current" != "$old" ]; then
   read_version "$current" && current_parts=$version_parts
   read_version "$old" && old_parts=$version_parts
+  # A pre-release of the same numbers comes before the release itself; one candidate to
+  # the next is fine. Build metadata, after a +, isn't a pre-release.
+  case ${current%%+*} in *-*) current_pre=1 ;; *) current_pre= ;; esac
+  case ${old%%+*} in *-*) old_pre=1 ;; *) old_pre= ;; esac
   if version_is_older "$current_parts" "$old_parts" ||
-    { [ "$current_parts" = "$old_parts" ] && case $current in *-*) true ;; *) false ;; esac; }; then
+    { [ "$current_parts" = "$old_parts" ] && [ -n "$current_pre" ] && [ -z "$old_pre" ]; }; then
     fail "$file holds $current, which is lower than $old on origin/$default: raise it, or put back $old and run this again"
-  fi
-  # Going stable is a deliberate step, and it passes the readiness review first: its
-  # entry in docs/readiness.md, as committed on this branch. A candidate such as
-  # 1.0.0-rc.1 still comes before 1.0.0, so it isn't gated, and the step from it is.
-  if readiness_before_stable "$old" && readiness_is_stable "$current"; then
-    if ! g show "HEAD:docs/readiness.md" 2>/dev/null | readiness_has_entry "$current"; then
-      fail "$current is the first stable version, which needs its readiness review first: run /dev-workflow:readiness, which records it in docs/readiness.md"
-    fi
   fi
   echo "skip already-raised: $current, against $old on origin/$default"
   exit 0

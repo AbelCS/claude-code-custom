@@ -16,7 +16,8 @@ readiness_has_entry() {
 # readiness_is_stable <version>: whether it's 1.0.0 or above and not a pre-release, the
 # versions the gate is for.
 readiness_is_stable() {
-  case $1 in
+  # Build metadata, after a +, can hold a dash, and isn't a pre-release.
+  case ${1%%+*} in
     0.* | *-*) return 1 ;;
   esac
 }

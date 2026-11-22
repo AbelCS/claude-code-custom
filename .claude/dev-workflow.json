@@ -18,7 +18,7 @@
     "AGENTS.md#communication": "d0161b1a4a529742557193c9c03adc0ded300295",
     ".githooks/dw-lib.sh": "e9b247188114350efa87a49131653b917e94cb35",
     ".githooks/commit-msg": "bc16ddc1e485a9b85aceace0790d8c7b07066b81",
-    ".githooks/pre-commit": "c1a269462b18260e3000c13531736b20d89f3214",
+    ".githooks/pre-commit": "3097ee8fe21756182c39a061d1af1e7358036eb6",
     ".githooks/pre-push": "0c14e1aad0bf7fba42e9126162bfb57ea2ef177f"
   }
 }

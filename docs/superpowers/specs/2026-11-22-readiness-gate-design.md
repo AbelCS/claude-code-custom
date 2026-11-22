@@ -72,7 +72,7 @@ One new check, after both versions are read and before `skip already-raised`, si
 - **Order is SemVer's.** `1.0.0-rc.1` is below 1.0.0, so a release candidate isn't gated, and `1.0.0-rc.1` to `1.0.0` is.
 - **Any jump is covered:** 0.9.2 to 2.0.0 needs an entry for 2.0.0.
 - **`skip first-version` stays above it,** so a first version file passes.
-- **With release-please,** `raise-version.sh` skips before reading any version, so the gate isn't in it. `enable-releases` checks for the entry with `check-entry.sh` before a release reaches 1.0.0, as judgment in its skill.
+- **With release-please and a `versionFile`,** the check runs before `skip release-please`, so a release pull request that reaches 1.0.0 is gated too. The entry lands first, in a pull request of its own. Without a `versionFile`, `enable-releases` checks for the entry with `check-entry.sh`, as judgment.
 
 ### `land`
 
@@ -105,3 +105,4 @@ Its hooks and managed sections are the plugin's own, so they change in the same 
 - **`--no-verify` skips the hook,** as it skips every hook. The rules forbid it, and the Claude Code hooks block it for the agent.
 - **release-please without a `versionFile`** has no version the script can read, so nothing gates it mechanically. `enable-releases` says to run the readiness skill before a release that reaches 1.0.0.
 - **The audit's exit code isn't the rule.** Stack files set their own level, so `land` reads the output for critical findings. That is judgment, not a script.
+- The heading check reads lines, so a heading inside a code block would count, and it doesn't check the date is a real one. Both were found in review and left: the skill writes the entry, and the date is today's.

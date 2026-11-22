@@ -102,12 +102,61 @@ git -C "$repo" reset -q
 printf 'line\n' >"$repo/src/old.ts"
 git -C "$repo" add src/old.ts
 git -C "$repo" commit -q --no-verify -m 'chore: an old file'
-printf "sk_""live_${d}${a}\n" >"$repo/src/old.ts"
+printf '%s\n' "sk_""live_${d}${a}" >"$repo/src/old.ts"
 git -C "$repo" add src/old.ts
 git -C "$repo" commit -q --no-verify -m 'chore: the secret, from before the hook'
 printf 'line\n' >"$repo/src/old.ts"
 git -C "$repo" add src/old.ts
 out=$(commit) || _assert_fail "removing a secret should pass: $out"
+
+# A line whose content starts with ++ is still added content.
+refuses src/plus.ts "++ sk_""live_${d}${a}" 'Stripe live key'
+
+# A file git is told not to diff is still read as text.
+git -C "$repo" reset -q
+printf 'gen/*.txt -diff\n' >"$repo/.gitattributes"
+git -C "$repo" add .gitattributes
+git -C "$repo" commit -q --no-verify -m 'chore: attributes'
+refuses gen/out.txt "sk_""live_${d}${a}" 'Stripe live key'
+
+# A placeholder in docs isn't a token.
+passes docs/slack.md 'Set SLACK_TOKEN to xo''xb-your-bot-token'
+
+# A refused secret stops the hook there: a formatter that echoes what it's given, as
+# an error frame would, never runs to print it.
+cat >"$repo/echo-fmt" <<'FMT'
+#!/bin/sh
+cat "$@"
+exit 1
+FMT
+chmod +x "$repo/echo-fmt"
+printf 'echo-fmt\n' >>"$repo/.git/info/exclude"
+cat >"$hooks/dev-workflow.env" <<ENV
+DW_DEFAULT_BRANCH='main'
+DW_CHECK='scripts/check'
+DW_CI_ALLOWLIST=''
+DW_FORMATTERS='*.ts|./echo-fmt'
+DW_SECRETS_ALLOW=''
+ENV
+token="sk_""live_${d}${a}"
+stage src/shown.ts "const key = '$token'"
+out=$(commit) && _assert_fail "expected the commit of src/shown.ts to be refused"
+assert_contains "$out" 'Stripe live key'
+assert_not_contains "$out" "$token"
+git -C "$repo" reset -q
+rm -f "$repo/src/shown.ts"
+write_env
+
+# The message gives the path as a glob that matches only it, so pasting it into the
+# allowlist can't let a neighbour through.
+stage 'app/users/[id]/fixture.ts' "k: sk_""live_${d}${a}"
+out=$(commit) && _assert_fail "expected the commit to be refused"
+assert_contains "$out" 'app/users/\[id\]/fixture.ts'
+git -C "$repo" reset -q
+write_env 'app/users/\[id\]/fixture.ts'
+passes 'app/users/[id]/fixture.ts' "k: sk_""live_${d}${a}"
+refuses app/users/i/fixture.ts "k: sk_""live_${d}${a}" 'Stripe live key'
+write_env
 
 # --- A path the project allows
 

@@ -198,6 +198,39 @@ assert_contains "$(run 'feat: go stable (#7)')" 'skip already-raised: 1.0.0'
 gate_fixture 2.0.0-rc.1 2.0.0
 assert_contains "$(run 'feat: a new major (#7)')" 'skip already-raised: 2.0.0'
 
+# Build metadata isn't a pre-release: 1.0.0+build-42 is stable, so it's gated.
+gate_fixture 0.9.4 1.0.0+build-42
+assert_exit 1 run 'feat: go stable (#7)'
+readiness '## 1.0.0+build-42, 2026-11-22'
+assert_contains "$(run 'feat: go stable (#7)')" 'skip already-raised: 1.0.0+build-42'
+gate_fixture 1.0.0-rc.1 1.0.0+build-42
+assert_exit 1 run 'feat: go stable (#7)'
+
+# One candidate to the next is raised by hand like any version.
+gate_fixture 1.0.0-rc.1 1.0.0-rc.2
+assert_contains "$(run 'feat: another candidate (#7)')" 'skip already-raised: 1.0.0-rc.2'
+
+# A version file moved in this pull request: the old version is read where origin's
+# project file says it is, so the move doesn't pass for a first version.
+new_fixture VERSION 0.9.4
+mkdir -p "$repo/app"
+git -C "$repo" mv VERSION app/VERSION
+printf '1.0.0\n' >"$repo/app/VERSION"
+jq '.versionFile = "app/VERSION"' "$repo/.claude/dev-workflow.json" >"$base/pf.json"
+cp "$base/pf.json" "$repo/.claude/dev-workflow.json"
+git -C "$repo" commit -q -am 'chore: move the version (#7)'
+assert_exit 1 run 'feat: go stable (#7)'
+assert_contains "$(run 'feat: go stable (#7)' 2>&1)" 'readiness'
+
+# With release-please, a release pull request crossing 1.0.0 is gated before the skip.
+gate_fixture 0.9.4 1.0.0
+printf '{}\n' >"$repo/release-please-config.json"
+git -C "$repo" add release-please-config.json
+git -C "$repo" commit -q -m 'chore: release-please (#7)'
+assert_exit 1 run 'chore(main): release 1.0.0'
+readiness '## 1.0.0, 2026-11-22'
+assert_contains "$(run 'chore(main): release 1.0.0')" 'skip release-please'
+
 # Raises that don't cross 1.0.0 aren't gated.
 gate_fixture 1.2.3 2.0.0
 assert_contains "$(run 'feat!: a new API (#7)')" 'skip already-raised: 2.0.0'

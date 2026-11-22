@@ -56,7 +56,10 @@ Then confirm `land`'s gate will read it:
 sh "${CLAUDE_PLUGIN_ROOT}/scripts/readiness/check-entry.sh" . <version>
 ```
 
-Commit it with the version's raise, `chore: release <version> (#<issue>)`, changing `versionFile` by hand to the version, and land it with `/dev-workflow:land`. Its raise step then finds the version raised and the entry in place.
+Then the version:
+
+- **Without release-please:** commit the entry with the version's raise, `chore: release <version> (#<issue>)`, changing `versionFile` by hand to the version, and land it with `/dev-workflow:land`. Its raise step finds the version raised and the entry in place.
+- **With release-please:** land the entry on its own, `docs: readiness for <version> (#<issue>)`. release-please raises the version in its own release pull request: set `release-as` to the version in its config if it wouldn't choose it, and `land` checks the entry is there before that pull request merges.
 
 ## 4. Report
 

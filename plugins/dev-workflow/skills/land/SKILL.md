@@ -53,7 +53,7 @@ Green means verify passed, every review finding was dealt with, and any checks o
 
 **Raise the version** just before merging, so the squash commit holds the code and its version together:
 
-1. `git fetch origin <default>`. If `git merge-base --is-ancestor origin/<default> HEAD` fails, the default branch has moved on: `git merge --no-edit origin/<default>` (a merge, so nothing pushed is rewritten). Resolve any conflict as in any merge, keeping origin's version on the version line, and run verify again on its own.
+1. `git fetch origin <default>`. If `git merge-base --is-ancestor origin/<default> HEAD` fails, the default branch has moved on: `git merge --no-edit origin/<default>` (a merge, so nothing pushed is rewritten). Resolve any conflict as in any merge, keeping origin's version on the version line, and run verify again on its own. Run `stage.sh` again too: if the project became stable meanwhile, do the stable checks in step 2 and 3 before going on.
 2. `sh "${CLAUDE_PLUGIN_ROOT}/scripts/land/raise-version.sh" . "<title>"`, with the pull request's title. It works out the bump from the title's type, as release-please does: `feat` the minor, `fix` and `perf` the patch, a `!` before the colon the major, one step lower before 1.0.0, and other types nothing.
    - `raised <old> <new>`: it committed the new version on this branch.
    - `unchanged` or `skip`: it changed nothing. Pass on what it says.
