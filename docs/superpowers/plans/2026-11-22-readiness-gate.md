@@ -34,7 +34,7 @@ Paths below are under `plugins/dev-workflow/` unless they start with `tests/`, `
 
 - [ ] **4. `raise-version.sh`: the gate.**
   Files: `scripts/land/raise-version.sh` (sources `lib/readiness.sh`; the check sits after `old` is read and before `skip already-raised`; the header comment), `tests/land/raise-version.test.sh`.
-  Tests: 0.9.2 on origin and 1.0.0 on the branch is refused, exit 1, nothing changed, naming the version and the skill. With an entry for 1.0.0 it prints `skip already-raised`. An entry for another version is refused. An entry only in the work tree, uncommitted, doesn't count. 0.9.2 to 2.0.0 needs the entry for 2.0.0. `1.0.0-rc.1` from 0.9.2 isn't gated, and 1.0.0 from `1.0.0-rc.1` is. A first version file at 2.3.0 still prints `skip first-version`. 1.2.1 with `feat` still gives 1.3.0, and 0.4.2 with `feat!` still gives 0.5.0, with no `docs/readiness.md`. With `release-please-config.json` and a `versionFile`: gated the same, then `skip release-please`. Without a `versionFile`: the skip as today. One round trip: an entry from `write-entry.sh` passes the gate.
+  Tests: 0.9.2 on origin and 1.0.0 on the branch is refused, exit 1, nothing changed, naming the version and the skill. With an entry for 1.0.0 it prints `skip already-raised`. An entry for another version is refused. An entry only in the work tree, uncommitted, doesn't count. 0.9.2 to 2.0.0 needs the entry for 2.0.0. `1.0.0-rc.1` from 0.9.2 isn't gated, and 1.0.0 from `1.0.0-rc.1` is. A first version file at 2.3.0 still prints `skip first-version`. 1.2.1 with `feat` still gives 1.3.0, and 0.4.2 with `feat!` still gives 0.5.0, with no `docs/readiness.md`. With `release-please-config.json`: the skip as today, as `enable-releases` holds that gate.
 
 - [ ] **5. `scripts/land/stage.sh`.**
   Files: new, with `tests/land/stage.test.sh` (new).
@@ -42,7 +42,7 @@ Paths below are under `plugins/dev-workflow/` unless they start with `tests/`, `
 
 - [ ] **6. The readiness skill.**
   Files: `skills/readiness/SKILL.md` (new, under 500 lines, the description starting with the trigger), `evals/readiness-fires/` and `evals/readiness-quiet/` (new, shaped like `land-fires` and `land-quiet`), `skills/independent-review/SKILL.md` (a caller may hand it a brief, here a security one naming entry points, not a diff).
-  The skill: the checklist, which items apply from `hasScreens` and `stack`, the three outcomes with reasons, findings to issues with `gh issue create`, the owner asked before anything is accepted, the entry through `write-entry.sh` only when every item has an outcome and every finding's issue is closed or accepted, then the version set by hand and `/dev-workflow:land`.
+  The skill: the checklist, which items apply from `hasScreens` and `stack`, the three outcomes with reasons, findings to issues with `gh issue create`, the owner asked before anything is accepted, the entry written only when every item has an outcome and every finding's issue is closed or accepted, then `check-entry.sh`, the version set by hand and `/dev-workflow:land`.
   Tests: `tests/skills/content.test.sh` pins the script's name, the three outcomes, `docs/readiness.md`, `/security-review`, `commands.audit` and `enable-releases`. `tests/skills/stack-words.test.sh` passes.
 
 - [ ] **7. `land` by stage.**

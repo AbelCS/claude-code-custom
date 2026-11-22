@@ -175,6 +175,12 @@ assert_contains "$(run 'feat: go stable (#7)')" 'skip already-raised: 1.0.0'
 gate_fixture 0.12.0 2.0.0
 assert_exit 1 run 'feat!: go stable (#7)'
 
+# An entry only on disk, not committed, isn't in the merge, so it doesn't count.
+gate_fixture 0.9.4 1.0.0
+mkdir -p "$repo/docs"
+printf '## 1.0.0, 2026-11-22\n' >"$repo/docs/readiness.md"
+assert_exit 1 run 'feat: go stable (#7)'
+
 # A heading that only starts with the version isn't its entry.
 gate_fixture 0.9.4 1.0.0
 readiness '## 1.0.0-rc.1, 2026-11-20'
