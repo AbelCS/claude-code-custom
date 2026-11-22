@@ -36,7 +36,11 @@ unset CLAUDECODE CLAUDE_CODE_ENTRYPOINT CLAUDE_CODE_SESSION_ID CLAUDE_CODE_CHILD
 
 marketplace=claude-code-custom
 url=https://git.invalid/claude-code-custom.git
-skills='choose-stack conventions-code conventions-ui enable-releases independent-review land maintain screen-check setup'
+# The plugin's own skills, from its folder in this checkout, sorted, so a new skill is
+# expected without a list to update.
+skills=$(for dir in "$ROOT"/plugins/dev-workflow/skills/*/; do basename "$dir"; done | sort | tr '\n' ' ')
+skills=${skills% }
+skill_count=$(printf '%s\n' "$skills" | wc -w | tr -d ' ')
 
 work=$(tmp_dir)
 GIT_CONFIG_GLOBAL=$work/gitconfig
@@ -150,7 +154,7 @@ records() {
     "$CLAUDE_CONFIG_DIR/plugins/installed_plugins.json"
 }
 
-# check_components <folder>: the plugin's details list the nine skills, once each.
+# check_components <folder>: the plugin's details list its skills, once each.
 check_components() {
   cp_details=$(cc_ok "$1" plugin details "dev-workflow@$marketplace")
   assert_contains "$cp_details" "dev-workflow $new_version"
@@ -158,8 +162,8 @@ check_components() {
   cp_names=$(printf '%s\n' "$cp_line" | sed 's/^ *Skills ([0-9]*) *//' | tr ',' '\n' |
     sed 's/^ *//; s/ *$//' | sort | tr '\n' ' ')
   assert_exit 0 test "$cp_names" = "$skills "
-  assert_contains "$cp_line" "Skills (9)"
-  # Commands would show among the skills, so nine names, once each, means none.
+  assert_contains "$cp_line" "Skills ($skill_count)"
+  # Commands would show among the skills, so its own names, once each, means none.
   assert_not_contains "$cp_details" "Commands ("
 }
 
@@ -174,7 +178,7 @@ cc_ok "$elsewhere" plugin install "dev-workflow@$marketplace" >/dev/null
 assert_exit 0 test "$(records dev-workflow)" = user
 check_components "$elsewhere"
 session "$project"
-assert_exit 0 test "$loaded" = "$new_version 9"
+assert_exit 0 test "$loaded" = "$new_version $skill_count"
 echo "fresh install: loads $loaded skills"
 fresh_config=$CLAUDE_CONFIG_DIR
 fresh_project=$project
@@ -185,7 +189,7 @@ cc_ok "$elsewhere" plugin marketplace add "$source_repo" >/dev/null
 cc_ok "$elsewhere" plugin install "dev-workflow@$marketplace" >/dev/null
 check_components "$elsewhere"
 session "$project"
-assert_exit 0 test "$loaded" = "$new_version 9"
+assert_exit 0 test "$loaded" = "$new_version $skill_count"
 echo "fresh install from a local folder: loads $loaded skills"
 
 # --- web-dev-workflow, installed for the user and for a project
@@ -220,9 +224,9 @@ install_output=$(cc_ok "$elsewhere" plugin install "dev-workflow@$marketplace")
 assert_not_contains "$install_output" "downgrade"
 assert_exit 0 test "$(records dev-workflow)" = "project user"
 session "$project"
-assert_exit 0 test "$loaded" = "$new_version 9"
+assert_exit 0 test "$loaded" = "$new_version $skill_count"
 session "$elsewhere"
-assert_exit 0 test "$loaded" = "$new_version 9"
+assert_exit 0 test "$loaded" = "$new_version $skill_count"
 check_components "$elsewhere"
 echo "  after claude plugin install dev-workflow@$marketplace: loads $loaded skills, in the project and elsewhere"
 
@@ -249,9 +253,9 @@ echo "web-dev-workflow, user only: not loaded after the marketplace update; the 
 # Here the documented update fixes it too, though it says nothing changed.
 update_output=$(cc_ok "$elsewhere" plugin update "dev-workflow@$marketplace")
 session "$elsewhere"
-assert_exit 0 test "$loaded" = "$new_version 9"
+assert_exit 0 test "$loaded" = "$new_version $skill_count"
 session "$project"
-assert_exit 0 test "$loaded" = "$new_version 9"
+assert_exit 0 test "$loaded" = "$new_version $skill_count"
 echo "  after claude plugin update: \"$(printf '%s\n' "$update_output" | tail -n 1)\", and it loads $loaded skills"
 
 # --- dev-workflow 0.2.0
@@ -270,7 +274,7 @@ update_output=$(cc_ok "$elsewhere" plugin update "dev-workflow@$marketplace")
 assert_contains "$update_output" "from 0.2.0 to $new_version"
 check_components "$elsewhere"
 session "$project"
-assert_exit 0 test "$loaded" = "$new_version 9"
+assert_exit 0 test "$loaded" = "$new_version $skill_count"
 echo "dev-workflow 0.2.0: \"$(printf '%s\n' "$update_output" | tail -n 1)\", then loads $loaded skills"
 
 # --- `${user_config.*}` in a skill, in the fresh install
